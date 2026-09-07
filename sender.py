@@ -82,7 +82,7 @@ def test_gmail_credentials(email_addr: str, app_pass: str) -> Tuple[bool, str]:
     except Exception as e:
         return False, f"Authentication Failed: {str(e)}"
 
-def send_single_email(sender_email: str, sender_password: str, recipient_email: str, subject: str, body_text: str, body_html: str = None) -> Tuple[bool, Optional[str]]:
+def send_single_email(sender_email: str, sender_password: str, recipient_email: str, subject: str, body_text: str, body_html: str = None, campaign_id: int = None) -> Tuple[bool, Optional[str]]:
     """Sends a single email using robust SMTP."""
     if settings.DRY_RUN:
         print(f"[DRY_RUN] Simulating email send from {sender_email} to {recipient_email}")
@@ -98,9 +98,14 @@ def send_single_email(sender_email: str, sender_password: str, recipient_email: 
         part1 = MIMEText(body_text, "plain", "utf-8")
         msg.attach(part1)
         
-        if body_html:
-            part2 = MIMEText(body_html, "html", "utf-8")
-            msg.attach(part2)
+        # Build HTML with open tracking pixel
+        pixel_tag = f'<img src="https://client-hunter-1.onrender.com/track/open/{campaign_id}" width="1" height="1" style="display:none;" />' if campaign_id else ''
+        html_content = body_html if body_html else f"""<div style="font-family: sans-serif; font-size: 14px; line-height: 1.6; color: #222;">
+{body_text.replace(chr(10), '<br>')}
+{pixel_tag}
+</div>"""
+        part2 = MIMEText(html_content, "html", "utf-8")
+        msg.attach(part2)
             
         clean_pass = sender_password.replace(" ", "")
         server = _get_smtp_connection(sender_email, clean_pass, timeout=20)
@@ -124,22 +129,32 @@ def process_email_queue(max_batch_size: int = 10) -> int:
         for camp in queued_campaigns:
             acc = account_mgr.get_available_account()
             if not acc:
-                print(f"[Sender] Account has reached today's warmup cap. Pausing sends.")
+                print(f"[Sender] Account has reached today's warmup cap or not configured. Pausing sends.")
                 break
                 
-            print(f"[Sender] Dispatching email #{camp.id} to {camp.recipient_email} via {acc['user']} (Warmup Day {acc['warmup_day']} - Limit: {acc['daily_limit']})...")
+            sender_usr = acc["user"] if acc.get("user") and acc.get("user") != "primary_account@gmail.com" else settings.GMAIL_ACCOUNT_1_USER
+            sender_pwd = acc["pass"] if acc.get("pass") and acc.get("pass") != "mock_password" else settings.GMAIL_ACCOUNT_1_PASS
+            
+            if not sender_usr or not sender_pwd:
+                camp.status = "FAILED"
+                camp.error_message = "Gmail account credentials not configured in Settings."
+                session.commit()
+                continue
+                
+            print(f"[Sender] Dispatching email #{camp.id} to {camp.recipient_email} via {sender_usr} (Warmup Day {acc.get('warmup_day', 1)} - Limit: {acc.get('daily_limit', 5)})...")
             success, err = send_single_email(
-                sender_email=acc["user"],
-                sender_password=acc["pass"],
+                sender_email=sender_usr,
+                sender_password=sender_pwd,
                 recipient_email=camp.recipient_email,
                 subject=camp.subject,
                 body_text=camp.body_text,
-                body_html=camp.body_html
+                body_html=camp.body_html,
+                campaign_id=camp.id
             )
             
             if success:
                 mark_email_sent(camp.id)
-                increment_daily_sent_count(acc["user"])
+                increment_daily_sent_count(sender_usr)
                 sent_count += 1
                 
                 delay = random.randint(3, 5) if settings.DRY_RUN else random.randint(settings.MIN_DELAY_BETWEEN_EMAILS_SEC, settings.MAX_DELAY_BETWEEN_EMAILS_SEC)

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = Field(default="", env="GEMINI_API_KEY")
     
     # Operation Mode
-    DRY_RUN: bool = Field(default=True, env="DRY_RUN")
+    DRY_RUN: bool = Field(default=False, env="DRY_RUN")
     SEND_DURING_BUSINESS_HOURS_ONLY: bool = Field(default=True, env="SEND_DURING_BUSINESS_HOURS_ONLY")
     
     # Redesign Offer Details
@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     SENDER_TITLE: str = Field(default="", env="SENDER_TITLE")
     
     # 4 Gmail Accounts Login Credentials
-    GMAIL_ACCOUNT_1_USER: str = Field(default="", env="GMAIL_ACCOUNT_1_USER")
-    GMAIL_ACCOUNT_1_PASS: str = Field(default="", env="GMAIL_ACCOUNT_1_PASS")
+    GMAIL_ACCOUNT_1_USER: str = Field(default="tusharkumarbusinessgrowth@gmail.com", env="GMAIL_ACCOUNT_1_USER")
+    GMAIL_ACCOUNT_1_PASS: str = Field(default="erkviudcqmhyrnhn", env="GMAIL_ACCOUNT_1_PASS")
     
     GMAIL_ACCOUNT_2_USER: str = Field(default="", env="GMAIL_ACCOUNT_2_USER")
     GMAIL_ACCOUNT_2_PASS: str = Field(default="", env="GMAIL_ACCOUNT_2_PASS")
@@ -44,21 +44,21 @@ class Settings(BaseSettings):
     
     # High-Ticket Target Niches
     BUSINESS_NICHES: List[str] = [
-        "roofing contractor",
-        "hvac installation and repair",
-        "plumbing and water damage",
-        "kitchen and bathroom remodeling",
-        "foundation repair contractor",
-        "solar panel installation",
-        "cosmetic dentist dental implants",
+        "cosmetic dentist dental implants clinic",
+        "carpenter custom woodworking cabinets",
+        "solar panel installation solar agency",
+        "roofing contractor roof replacement",
+        "hvac heating and air conditioning repair",
+        "plumbing contractor water damage",
+        "kitchen and bathroom remodeling contractor",
         "personal injury attorney law firm",
-        "estate planning lawyer",
+        "chiropractor chiropractic wellness center",
+        "electrician electrical contractor",
         "commercial landscaping hardscaping",
         "tree removal and arborist service",
-        "commercial cleaning janitorial",
-        "electrician electrical contractor",
         "auto collision repair body shop",
-        "custom home builder general contractor"
+        "commercial cleaning janitorial services",
+        "pool installation and repair contractor"
     ]
     
     class Config:

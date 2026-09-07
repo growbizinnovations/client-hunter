@@ -27,6 +27,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 SCAN_PROGRESS = {
     "is_scanning": False,
     "current_city": "",
+    "current_niche": "",
     "stage": "Idle",
     "step": 0,
     "total_steps": 4,
@@ -39,7 +40,7 @@ SCAN_PROGRESS = {
     "log_message": "Ready to scan"
 }
 
-def update_scan_progress(pct=None, stage=None, log=None, leads=None, audited=None, outdated=None, emails=None, pitches=None):
+def update_scan_progress(pct=None, stage=None, log=None, leads=None, audited=None, outdated=None, emails=None, pitches=None, niche=None, city=None):
     if pct is not None:
         SCAN_PROGRESS["pct"] = min(100, max(0, pct))
     if stage is not None:
@@ -56,6 +57,10 @@ def update_scan_progress(pct=None, stage=None, log=None, leads=None, audited=Non
         SCAN_PROGRESS["emails_found"] = emails
     if pitches is not None:
         SCAN_PROGRESS["pitches_queued"] = pitches
+    if niche is not None:
+        SCAN_PROGRESS["current_niche"] = niche
+    if city is not None:
+        SCAN_PROGRESS["current_city"] = city
 
 def job_discover_and_audit():
     """Daily job: Picks the next US city (East to West), discovers leads, audits websites, extracts emails, and generates pitches."""
@@ -67,6 +72,7 @@ def job_discover_and_audit():
     SCAN_PROGRESS["outdated_count"] = 0
     SCAN_PROGRESS["emails_found"] = 0
     SCAN_PROGRESS["pitches_queued"] = 0
+    SCAN_PROGRESS["current_niche"] = "Initializing"
     
     logging.info("=== [DAEMON] Starting City Discovery & Website Audit Pipeline ===")
     
@@ -80,14 +86,15 @@ def job_discover_and_audit():
             
         city_name = f"{city_obj.city}, {city_obj.state}"
         SCAN_PROGRESS["current_city"] = city_name
-        update_scan_progress(pct=15, stage=f"Step 1/4: Discovering businesses in {city_name}", log=f"Searching local high-ticket niches in {city_name} (East-to-West Route)...")
+        update_scan_progress(pct=10, stage=f"Step 1/4: Discovering businesses in {city_name}", log=f"Searching local high-ticket niches in {city_name} (East-to-West Route)...", city=city_name)
         logging.info(f"[DAEMON] Active target city: {city_obj.city}, {city_obj.state} (Lon: {city_obj.lon})")
         
-        # 1. Discover Businesses
-        def on_search_progress(msg):
-            update_scan_progress(log=msg)
+        # 1. Discover Businesses with granular niche callbacks
+        def on_search_progress(c_city, c_state, c_niche, n_idx, total_n, msg):
+            calc_pct = 10 + int((n_idx / max(1, total_n)) * 25)
+            update_scan_progress(pct=calc_pct, niche=c_niche, log=msg, stage=f"Step 1/4: Searching '{c_niche}' in {c_city}, {c_state}")
             
-        discovered = discover_businesses_for_city(city_obj.city, city_obj.state, max_leads_per_niche=4, progress_callback=on_search_progress)
+        discovered = discover_businesses_for_city(city_obj.city, city_obj.state, max_leads_per_niche=8, progress_callback=on_search_progress)
         
         # 2. Audit Websites for newly discovered or pending leads
         session = SessionLocal()

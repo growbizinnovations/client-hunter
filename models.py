@@ -100,6 +100,8 @@ class EmailCampaign(Base):
     body_html = Column(Text, nullable=True)
     email_type = Column(String(50), default="INITIAL_OUTREACH")
     status = Column(String(50), default="QUEUED") # QUEUED, SENT, FAILED
+    is_opened = Column(Boolean, default=False)
+    opened_at = Column(DateTime, nullable=True)
     scheduled_for = Column(DateTime, default=datetime.utcnow)
     sent_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)

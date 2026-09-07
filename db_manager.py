@@ -368,6 +368,69 @@ def mark_email_sent(campaign_id: int):
     finally:
         session.close()
 
+def delete_lead(lead_id: int) -> bool:
+    """Deletes a lead and its associated audits, contacts, campaigns, and messages."""
+    session = SessionLocal()
+    try:
+        lead = session.query(Lead).filter(Lead.id == lead_id).first()
+        if lead:
+            session.delete(lead)
+            session.commit()
+            return True
+        return False
+    finally:
+        session.close()
+
+def cleanup_modern_leads() -> int:
+    """Deletes all leads that have modern/good websites (not outdated)."""
+    session = SessionLocal()
+    try:
+        modern_leads = session.query(Lead).filter(Lead.status == "AUDITED_MODERN").all()
+        count = len(modern_leads)
+        for l in modern_leads:
+            session.delete(l)
+        session.commit()
+        return count
+    finally:
+        session.close()
+
+def clear_all_leads_data() -> bool:
+    """Clears all leads, audits, contacts, campaigns, and inbox messages for fresh start."""
+    session = SessionLocal()
+    try:
+        session.query(InboxMessage).delete()
+        session.query(EmailCampaign).delete()
+        session.query(ContactInfo).delete()
+        session.query(WebsiteAudit).delete()
+        session.query(Lead).delete()
+        session.commit()
+        return True
+    finally:
+        session.close()
+
+def set_active_target_city(city_name: str, state_name: str) -> bool:
+    """Sets a specific city as the immediate active target city to scan."""
+    session = SessionLocal()
+    try:
+        # Reset scan status on target city so it becomes the immediate next target
+        target = session.query(CityProgress).filter(
+            func.lower(CityProgress.city) == city_name.strip().lower(),
+            func.lower(CityProgress.state) == state_name.strip().lower()
+        ).first()
+        if not target:
+            target = CityProgress(city=city_name.strip(), state=state_name.strip(), lat=0.0, lon=999.0, cursor_index=0)
+            session.add(target)
+            session.commit()
+            session.refresh(target)
+            
+        target.last_scanned_at = None
+        target.scan_count = 0
+        target.lon = 999.0 # Highest priority
+        session.commit()
+        return True
+    finally:
+        session.close()
+
 def get_stats() -> Dict[str, Any]:
     session = SessionLocal()
     try:

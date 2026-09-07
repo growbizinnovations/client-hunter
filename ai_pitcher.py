@@ -44,51 +44,43 @@ def call_gemini_chat(prompt: str) -> Optional[str]:
     return None
 
 def create_template_pitch(business_name: str, city: str, state: str, domain: str, issues: List[str]) -> Dict[str, str]:
-    bullet_points = ""
+    issue_desc = "a few quick mobile and display fixes"
     if issues:
-        clean_issues = [f"• {issue}" for issue in issues[:3]]
-        bullet_points = "\n".join(clean_issues)
-    else:
-        bullet_points = "• Mobile display alignment issues on modern smartphone screens\n• Insecure HTTP connection (missing SSL certificate)\n• Outdated copyright year and slow page load speed"
-        
-    subject = f"Quick question regarding {business_name}'s website in {city}"
-    body_text = f"""Hi {business_name} Team,
+        first = issues[0].lower()
+        if "ssl" in first:
+            issue_desc = "missing SSL security"
+        elif "mobile" in first or "viewport" in first:
+            issue_desc = "mobile display alignment issues on smartphones"
+        elif "copyright" in first:
+            issue_desc = "an outdated copyright and layout"
+            
+    subject = f"Quick question regarding {domain}"
+    body_text = f"""Hi {business_name} team,
 
-I came across your website ({domain}) while researching established businesses in {city}, {state}. You guys do great work in the area, but I noticed a few technical and design things on your site that might be costing you potential customers:
+I came across your site ({domain}) while researching local businesses in {city} and noticed {issue_desc}.
 
-{bullet_points}
+We build clean, mobile-friendly websites that turn visitors into paying clients.
 
-We specialize in modern, mobile-friendly websites that convert visitors into paying clients.
+I'd love to put together a 100% free redesign demo for {business_name}. If you love it, it's just a flat ${settings.REDESIGN_OFFER_PRICE} to launch. If not, you owe nothing.
 
-To make this completely risk-free: we would love to build you a free custom redesign demo. If you're interested, just reply to this email with any specific changes, new services, or style preferences you'd like (or we can modernize the entire layout from scratch), and we'll build and send over a demo link for you to review.
+Would you be open to seeing a free preview?
 
-If you love the demo and want to launch it, we do the full handover and setup for a flat ${settings.REDESIGN_OFFER_PRICE}. If not, no worries at all and you owe nothing.
-
-Would you be open to seeing a free custom demo for {business_name}?
-
-Best regards,
-
-{settings.SENDER_NAME}
-"""
+Best,
+{settings.SENDER_NAME}"""
     return {"subject": subject, "body_text": body_text}
 
 def generate_personalized_pitch(business_name: str, city: str, state: str, domain: str, niche: str, issues: List[str]) -> Dict[str, str]:
     prompt = f"""
-Write a concise, friendly, authentic, and high-converting cold email offering a free website redesign demo.
-
-Business Details:
-- Name: {business_name}
-- Industry/Niche: {niche}
-- City/State: {city}, {state}
-- Website Domain: {domain}
-- Website Audit Flaws Found: {json.dumps(issues)}
+Write an extremely short, punchy, high-converting B2B cold email (STRICTLY 50 to 70 words total).
+Prospect: {business_name} ({niche} in {city}, {state}, domain: {domain}).
+Website issues: {json.dumps(issues[:2])}
 
 Offer:
-- Build and send a 100% FREE custom website redesign demo.
-- If they like it, full launch is flat ${settings.REDESIGN_OFFER_PRICE}. If not, zero cost.
-- Ask them to reply with what they'd like changed so we can build the demo.
-- Sender: {settings.SENDER_NAME} (no title).
-- NO calendar links or phone calls. Strictly over email.
+- 100% FREE custom website redesign preview / demo.
+- If they want to keep and launch it, flat ${settings.REDESIGN_OFFER_PRICE}. If not, $0.
+- Sender: {settings.SENDER_NAME} (no company or title).
+- Short CTA: Would you be open to seeing a quick free preview?
+- STRICT WORD LIMIT: 50 - 70 words.
 
 Return JSON with keys "subject" and "body_text".
 """
@@ -98,7 +90,8 @@ Return JSON with keys "subject" and "body_text".
         if raw_json:
             try:
                 data = json.loads(raw_json)
-                return {"subject": data.get("subject"), "body_text": data.get("body_text")}
+                if data.get("subject") and data.get("body_text"):
+                    return {"subject": data.get("subject"), "body_text": data.get("body_text")}
             except Exception:
                 pass
                 
@@ -108,7 +101,8 @@ Return JSON with keys "subject" and "body_text".
         if raw_json:
             try:
                 data = json.loads(raw_json)
-                return {"subject": data.get("subject"), "body_text": data.get("body_text")}
+                if data.get("subject") and data.get("body_text"):
+                    return {"subject": data.get("subject"), "body_text": data.get("body_text")}
             except Exception:
                 pass
                 
@@ -118,29 +112,26 @@ Return JSON with keys "subject" and "body_text".
 def generate_followup_email(business_name: str, city: str, original_subject: str, step: int) -> Dict[str, str]:
     subject = f"Re: {original_subject}"
     if step == 1:
-        body_text = f"""Hi {business_name} Team,
+        body_text = f"""Hi {business_name} team,
 
-Just following up on my previous note regarding your website.
+Just following up on my quick note about {business_name}'s website.
 
-We'd still love to build a free custom redesign demo for {business_name} to show you how a faster, modern layout can help bring in more local leads in {city}.
+We'd still love to build you a free redesign preview to show how a faster mobile layout can bring in more local customers in {city}.
 
-If you have any specific changes or features in mind (or want us to put together a fresh modern look), just reply back and let us know what you'd like to update so we can build the demo for you.
+If interested, just reply and I'll send over the free demo link.
 
-Best regards,
-
-{settings.SENDER_NAME}
-"""
+Best,
+{settings.SENDER_NAME}"""
     else:
-        body_text = f"""Hi {business_name} Team,
+        body_text = f"""Hi {business_name} team,
 
-I know you're busy running operations at {business_name}, so I'll make this my last follow-up!
+I know you're busy, so this will be my last note!
 
-If you ever want to upgrade your website down the road or want to see a free custom demo built for just ${settings.REDESIGN_OFFER_PRICE} if you love it, feel free to reply to this email anytime with what you'd like changed.
+If you ever want a fresh, modern website for {business_name} (just ${settings.REDESIGN_OFFER_PRICE} flat to launch if you love the demo), feel free to reach out anytime.
 
-Wishing {business_name} all the best!
+Wishing you all the best!
 
-Best regards,
-
-{settings.SENDER_NAME}
-"""
+Best,
+{settings.SENDER_NAME}"""
+    return {"subject": subject, "body_text": body_text}
     return {"subject": subject, "body_text": body_text}

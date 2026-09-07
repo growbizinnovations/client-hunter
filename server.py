@@ -68,11 +68,41 @@ def api_get_stats():
         "dry_run": settings.DRY_RUN
     }
 
+from db_manager import (
+    init_db, get_stats, get_account_warmup_status, SessionLocal,
+    delete_lead, cleanup_modern_leads, clear_all_leads_data, set_active_target_city
+)
+
+class SetActiveCityRequest(BaseModel):
+    city: str
+    state: str
+
 @app.get("/api/leads")
-def api_get_leads(limit: int = 100):
+def api_get_leads(limit: int = 200, status_filter: str = "ALL", sort_by: str = "worst_first", niche: str = "ALL"):
     session = SessionLocal()
     try:
-        leads = session.query(Lead).order_by(Lead.id.desc()).limit(limit).all()
+        query = session.query(Lead).outerjoin(WebsiteAudit)
+        
+        if status_filter == "OUTDATED":
+            query = query.filter(Lead.status.in_(["AUDITED_OUTDATED", "EMAIL_FOUND", "EMAIL_QUEUED", "EMAIL_SENT", "FOLLOW_UP_1", "FOLLOW_UP_2", "REPLIED"]))
+        elif status_filter == "MODERN":
+            query = query.filter(Lead.status == "AUDITED_MODERN")
+        elif status_filter == "EMAIL_FOUND":
+            query = query.filter(Lead.status.in_(["EMAIL_FOUND", "EMAIL_QUEUED", "EMAIL_SENT", "FOLLOW_UP_1", "FOLLOW_UP_2", "REPLIED"]))
+            
+        if niche != "ALL" and niche.strip():
+            query = query.filter(func.lower(Lead.niche).contains(niche.strip().lower()))
+            
+        if sort_by == "worst_first":
+            query = query.order_by(WebsiteAudit.outdated_score.desc().nullslast(), Lead.id.desc())
+        elif sort_by == "best_first":
+            query = query.order_by(WebsiteAudit.outdated_score.asc().nullslast(), Lead.id.desc())
+        elif sort_by == "name_asc":
+            query = query.order_by(Lead.business_name.asc())
+        else: # recent
+            query = query.order_by(Lead.id.desc())
+            
+        leads = query.limit(limit).all()
         data = []
         for l in leads:
             issues = []
@@ -90,8 +120,9 @@ def api_get_leads(limit: int = 100):
                 "state": l.state,
                 "niche": l.niche,
                 "status": l.status,
-                "outdated_score": l.audit.outdated_score if l.audit else None,
+                "outdated_score": l.audit.outdated_score if l.audit else 0,
                 "copyright_year": l.audit.copyright_year if l.audit else None,
+                "is_outdated": l.audit.is_outdated if l.audit else False,
                 "issues": issues,
                 "emails": [c.email for c in l.contacts],
                 "created_at": l.created_at.strftime("%Y-%m-%d %H:%M") if l.created_at else None
@@ -99,6 +130,46 @@ def api_get_leads(limit: int = 100):
         return data
     finally:
         session.close()
+
+@app.delete("/api/leads/{lead_id}")
+def api_delete_lead(lead_id: int):
+    success = delete_lead(lead_id)
+    return {"success": success, "message": f"Lead #{lead_id} removed."}
+
+@app.post("/api/leads/cleanup-modern")
+def api_cleanup_modern():
+    count = cleanup_modern_leads()
+    return {"success": True, "count": count, "message": f"Removed {count} modern/good websites from list."}
+
+@app.post("/api/leads/clear-all")
+def api_clear_all_leads():
+    success = clear_all_leads_data()
+    return {"success": success, "message": "All discovered leads and campaigns cleared successfully."}
+
+@app.post("/api/cities/set-active")
+def api_set_active_city(req: SetActiveCityRequest):
+    success = set_active_target_city(req.city, req.state)
+    return {"success": success, "message": f"Active target city locked to {req.city}, {req.state}."}
+
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+
+PIXEL_PNG = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\rIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82'
+
+@app.get("/track/open/{campaign_id}")
+def api_track_open(campaign_id: int):
+    session = SessionLocal()
+    try:
+        camp = session.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
+        if camp:
+            camp.is_opened = True
+            if not camp.opened_at:
+                camp.opened_at = datetime.utcnow()
+            session.commit()
+    except Exception as e:
+        print(f"[Open Tracker] Error: {e}")
+    finally:
+        session.close()
+    return Response(content=PIXEL_PNG, media_type="image/png")
 
 @app.get("/api/campaigns")
 def api_get_campaigns(limit: int = 50):
@@ -116,8 +187,11 @@ def api_get_campaigns(limit: int = 50):
                 "subject": c.subject,
                 "body_text": c.body_text,
                 "status": c.status,
+                "is_opened": getattr(c, "is_opened", False),
+                "opened_at": c.opened_at.strftime("%Y-%m-%d %H:%M") if getattr(c, "opened_at", None) else None,
                 "email_type": c.email_type,
                 "sent_at": c.sent_at.strftime("%Y-%m-%d %H:%M") if c.sent_at else None,
+                "error_message": c.error_message,
                 "created_at": c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else None
             })
         return data
