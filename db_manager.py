@@ -2,7 +2,7 @@ import os
 import json
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Tuple, Dict, Any
-from sqlalchemy import create_engine, func, and_, or_
+from sqlalchemy import create_engine, func, and_, or_, text
 from sqlalchemy.orm import sessionmaker, Session
 
 from settings import settings
@@ -75,6 +75,19 @@ def init_db():
     """Initializes tables and seeds the East-to-West cities table if empty."""
     Base.metadata.create_all(bind=ENGINE)
     
+    # Safe SQLite auto-migration for newly added columns
+    with ENGINE.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE email_campaigns ADD COLUMN is_opened BOOLEAN DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE email_campaigns ADD COLUMN opened_at DATETIME"))
+            conn.commit()
+        except Exception:
+            pass
+
     session = SessionLocal()
     try:
         city_count = session.query(CityProgress).count()

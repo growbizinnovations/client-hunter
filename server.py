@@ -1,19 +1,24 @@
 import os
 import json
 import sys
-import json
 import threading
 import time
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, BackgroundTasks
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 import uvicorn
 
 from settings import settings
-from db_manager import init_db, get_stats, get_account_warmup_status, SessionLocal
+from db_manager import (
+    init_db, get_stats, get_account_warmup_status, SessionLocal,
+    delete_lead, cleanup_modern_leads, clear_all_leads_data, set_active_target_city,
+    increment_daily_sent_count, mark_email_sent
+)
 from models import CityProgress, Lead, WebsiteAudit, ContactInfo, EmailCampaign, InboxMessage, DailySendLog
-from sender import GmailAccountManager, test_gmail_credentials, process_email_queue
+from sender import GmailAccountManager, test_gmail_credentials, process_email_queue, send_single_email, send_campaign_now
+from ai_pitcher import generate_personalized_pitch
 from inbox_monitor import check_all_inboxes
 from daemon import job_discover_and_audit, job_send_queued_emails, job_monitor_inbox, job_check_follow_ups
 
@@ -155,7 +160,116 @@ def api_set_active_city(req: SetActiveCityRequest):
     success = set_active_target_city(req.city, req.state)
     return {"success": success, "message": f"Active target city locked to {req.city}, {req.state}."}
 
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+class SendCustomEmailRequest(BaseModel):
+    recipient_email: str
+    subject: str
+    body_text: str
+
+@app.get("/api/leads/{lead_id}/draft-pitch")
+def api_get_lead_draft_pitch(lead_id: int):
+    session = SessionLocal()
+    try:
+        lead = session.query(Lead).filter(Lead.id == lead_id).first()
+        if not lead:
+            return JSONResponse(status_code=404, content={"success": False, "message": "Lead not found"})
+        
+        issues = []
+        if lead.audit and lead.audit.issues_json:
+            try:
+                issues = json.loads(lead.audit.issues_json)
+            except Exception:
+                issues = []
+        
+        pitch = generate_personalized_pitch(
+            business_name=lead.business_name,
+            city=lead.city,
+            state=lead.state,
+            domain=lead.domain,
+            niche=lead.niche,
+            issues=issues
+        )
+        
+        recipient_email = lead.contacts[0].email if lead.contacts else ""
+        
+        return {
+            "success": True,
+            "lead_id": lead.id,
+            "business_name": lead.business_name,
+            "domain": lead.domain,
+            "city": lead.city,
+            "state": lead.state,
+            "recipient_email": recipient_email,
+            "emails": [c.email for c in lead.contacts],
+            "subject": pitch.get("subject", f"Quick question regarding {lead.domain}"),
+            "body_text": pitch.get("body_text", "")
+        }
+    finally:
+        session.close()
+
+@app.post("/api/leads/{lead_id}/send-custom-email")
+def api_send_custom_email(lead_id: int, req: SendCustomEmailRequest):
+    session = SessionLocal()
+    try:
+        lead = session.query(Lead).filter(Lead.id == lead_id).first()
+        if not lead:
+            return {"success": False, "message": f"Lead #{lead_id} not found."}
+            
+        recipient = req.recipient_email.strip()
+        if not recipient or "@" not in recipient:
+            return {"success": False, "message": "Please provide a valid recipient email address."}
+            
+        sender_usr = settings.GMAIL_ACCOUNT_1_USER
+        sender_pwd = settings.GMAIL_ACCOUNT_1_PASS
+        if not sender_usr or not sender_pwd:
+            return {"success": False, "message": "Gmail account not configured in Settings. Please add your Gmail & App Password in the Settings tab."}
+            
+        camp = session.query(EmailCampaign).filter(
+            EmailCampaign.lead_id == lead.id,
+            EmailCampaign.recipient_email == recipient
+        ).first()
+        
+        if not camp:
+            camp = EmailCampaign(
+                lead_id=lead.id,
+                recipient_email=recipient,
+                sender_account=sender_usr,
+                subject=req.subject.strip(),
+                body_text=req.body_text.strip(),
+                email_type="INITIAL",
+                status="QUEUED"
+            )
+            session.add(camp)
+            session.commit()
+            session.refresh(camp)
+        else:
+            camp.subject = req.subject.strip()
+            camp.body_text = req.body_text.strip()
+            camp.sender_account = sender_usr
+            camp.status = "QUEUED"
+            session.commit()
+
+        success, err = send_single_email(
+            sender_email=sender_usr,
+            sender_password=sender_pwd,
+            recipient_email=recipient,
+            subject=req.subject.strip(),
+            body_text=req.body_text.strip(),
+            campaign_id=camp.id
+        )
+        
+        if success:
+            mark_email_sent(camp.id)
+            increment_daily_sent_count(sender_usr)
+            lead.status = "EMAIL_SENT"
+            session.commit()
+            return {"success": True, "message": f"Outreach email successfully sent to {recipient} via Gmail!"}
+        else:
+            camp.status = "FAILED"
+            camp.error_message = err
+            session.commit()
+            return {"success": False, "message": f"Send failed: {err}"}
+    finally:
+        session.close()
 
 PIXEL_PNG = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\rIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82'
 

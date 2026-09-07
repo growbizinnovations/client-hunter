@@ -458,6 +458,118 @@
         </div>
       </div>
     </div>
+
+    <!-- Manual Email Outreach Modal -->
+    <div id="email-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-all duration-200">
+      <div class="bg-slate-900 border-2 border-indigo-500/50 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        
+        <!-- Modal Header -->
+        <div class="px-6 py-4 bg-gradient-to-r from-slate-900 via-indigo-950/60 to-slate-900 border-b border-darkborder flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-brand-500/30">
+              <i data-lucide="mail" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <span>Send Outreach Email via Gmail</span>
+                <span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">100% Free Demo Pitch</span>
+              </h3>
+              <p id="modal-lead-subtitle" class="text-xs text-slate-400">Personalized outreach from Tushar</p>
+            </div>
+          </div>
+          <button onclick="closeManualEmailModal()" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-6 space-y-4 overflow-y-auto flex-1">
+          <!-- Lead Meta Banner -->
+          <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div>
+              <span class="text-slate-400 font-medium">Target Business:</span>
+              <span id="modal-biz-name" class="font-bold text-white ml-1">-</span>
+              <span id="modal-biz-domain" class="text-brand-400 ml-1 font-mono">(-)</span>
+            </div>
+            <div id="modal-location-badge" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 font-semibold border border-slate-700">
+              Location: -
+            </div>
+          </div>
+
+          <!-- Recipient Email Field -->
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1 flex items-center justify-between">
+              <span>Recipient Email Address</span>
+              <span class="text-[11px] font-normal text-slate-400">Extracted contact</span>
+            </label>
+            <input 
+              type="email" 
+              id="modal-recipient-input" 
+              placeholder="e.g. contact@business.com or dr@practice.com" 
+              class="w-full bg-slate-950 border border-darkborder focus:border-brand-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 font-mono"
+            />
+            <div id="modal-alternative-emails" class="flex flex-wrap gap-1.5 mt-2 hidden"></div>
+          </div>
+
+          <!-- Subject Line -->
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1">Subject Line</label>
+            <input 
+              type="text" 
+              id="modal-subject-input" 
+              placeholder="Quick question regarding domain.com" 
+              class="w-full bg-slate-950 border border-darkborder focus:border-brand-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 font-medium"
+            />
+          </div>
+
+          <!-- Pitch Body -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs font-bold text-slate-300">Email Pitch (50 - 75 Words Recommended)</label>
+              <span id="modal-word-count-badge" class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">0 words</span>
+            </div>
+            <textarea 
+              id="modal-body-input" 
+              rows="7" 
+              oninput="updateModalWordCount()"
+              placeholder="Drafting tailored pitch..." 
+              class="w-full bg-slate-950 border border-darkborder focus:border-brand-500 rounded-xl p-3.5 text-xs sm:text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 font-sans leading-relaxed whitespace-pre-wrap"
+            ></textarea>
+          </div>
+
+          <!-- Status & Result Alerts -->
+          <div id="modal-status-alert" class="hidden text-xs p-3 rounded-xl"></div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="px-6 py-4 bg-slate-950/90 border-t border-darkborder flex flex-wrap items-center justify-between gap-3">
+          <button 
+            id="btn-open-gmail-web" 
+            onclick="openInGmailWeb()" 
+            class="px-3.5 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-darkborder transition flex items-center gap-1.5"
+            title="Open this draft directly in Gmail browser composer"
+          >
+            <i data-lucide="external-link" class="w-3.5 h-3.5 text-indigo-400"></i> Open in Gmail Composer
+          </button>
+          <div class="flex items-center gap-2">
+            <button 
+              onclick="closeManualEmailModal()" 
+              class="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+            >
+              Cancel
+            </button>
+            <button 
+              id="btn-send-modal-email" 
+              onclick="sendManualEmailSubmit()" 
+              class="px-5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-600/30 transition flex items-center gap-2 active:scale-95"
+            >
+              <i data-lucide="send" class="w-3.5 h-3.5 text-white"></i> <span>Send via Gmail Now</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
   </main>
 
   <footer class="border-t border-darkborder py-4 text-center text-xs text-slate-500">
@@ -638,9 +750,14 @@ async function loadLeads() {
             <span class="px-2 py-0.5 text-xs font-semibold rounded bg-slate-800 text-slate-300 border border-darkborder">${l.status}</span>
           </td>
           <td class="px-4 py-3 text-center">
-            <button onclick="deleteSingleLead(${l.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white transition" title="Delete lead">
-              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-            </button>
+            <div class="flex items-center justify-center gap-1.5">
+              <button onclick="openManualEmailModal(${l.id})" class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1 shadow transition" title="Draft and send custom outreach email">
+                <i data-lucide="mail" class="w-3.5 h-3.5"></i> <span>Send Email</span>
+              </button>
+              <button onclick="deleteSingleLead(${l.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white transition" title="Delete lead">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
           </td>
         </tr>
       `;
@@ -1040,6 +1157,154 @@ async function saveSettings() {
   msgBox.textContent = '✅ ' + data.message;
   loadStats();
   loadSettings();
+}
+
+let currentModalLeadId = null;
+
+async function openManualEmailModal(leadId) {
+  currentModalLeadId = leadId;
+  const modal = document.getElementById('email-modal');
+  const alertBox = document.getElementById('modal-status-alert');
+  alertBox.className = 'hidden';
+  alertBox.textContent = '';
+  
+  modal.classList.remove('hidden');
+  
+  document.getElementById('modal-biz-name').textContent = 'Loading...';
+  document.getElementById('modal-biz-domain').textContent = '';
+  document.getElementById('modal-location-badge').textContent = 'Loading...';
+  document.getElementById('modal-recipient-input').value = '';
+  document.getElementById('modal-subject-input').value = 'Loading pitch...';
+  document.getElementById('modal-body-input').value = 'Generating tailored 50-70 word pitch from agent...';
+  document.getElementById('modal-alternative-emails').innerHTML = '';
+  document.getElementById('modal-alternative-emails').classList.add('hidden');
+  
+  const sendBtn = document.getElementById('btn-send-modal-email');
+  sendBtn.disabled = false;
+  sendBtn.innerHTML = '<i data-lucide="send" class="w-3.5 h-3.5 text-white"></i> <span>Send via Gmail Now</span>';
+  lucide.createIcons();
+
+  try {
+    const res = await fetch(`/api/leads/${leadId}/draft-pitch`);
+    const data = await res.json();
+    if (!data.success) {
+      alertBox.className = 'text-xs p-3 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 block';
+      alertBox.textContent = data.message || 'Error drafting pitch.';
+      return;
+    }
+
+    document.getElementById('modal-biz-name').textContent = data.business_name;
+    document.getElementById('modal-biz-domain').textContent = `(${data.domain})`;
+    document.getElementById('modal-location-badge').textContent = `${data.city}, ${data.state}`;
+    document.getElementById('modal-lead-subtitle').textContent = `Outreach for ${data.business_name} (${data.domain})`;
+    document.getElementById('modal-recipient-input').value = data.recipient_email || '';
+    document.getElementById('modal-subject-input').value = data.subject || `Quick question regarding ${data.domain}`;
+    document.getElementById('modal-body-input').value = data.body_text || '';
+
+    if (data.emails && data.emails.length > 1) {
+      const altBox = document.getElementById('modal-alternative-emails');
+      altBox.innerHTML = '<span class="text-[11px] text-slate-400 mr-1">Discovered emails:</span>' + 
+        data.emails.map(em => `<button type="button" onclick="document.getElementById('modal-recipient-input').value='${em}'" class="px-2 py-0.5 rounded bg-indigo-950 hover:bg-indigo-900 text-indigo-300 text-[11px] border border-indigo-500/30 transition">${em}</button>`).join(' ');
+      altBox.classList.remove('hidden');
+    }
+
+    updateModalWordCount();
+    lucide.createIcons();
+  } catch (err) {
+    alertBox.className = 'text-xs p-3 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 block';
+    alertBox.textContent = 'Failed to load pitch: ' + err;
+  }
+}
+
+function closeManualEmailModal() {
+  const modal = document.getElementById('email-modal');
+  modal.classList.add('hidden');
+  currentModalLeadId = null;
+}
+
+function updateModalWordCount() {
+  const text = document.getElementById('modal-body-input').value.trim();
+  const words = text ? text.split(/\s+/).length : 0;
+  const badge = document.getElementById('modal-word-count-badge');
+  if (badge) {
+    if (words >= 45 && words <= 85) {
+      badge.className = 'text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      badge.textContent = `${words} words (Optimal length)`;
+    } else {
+      badge.className = 'text-[11px] font-mono px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/30';
+      badge.textContent = `${words} words`;
+    }
+  }
+}
+
+function openInGmailWeb() {
+  const recipient = encodeURIComponent(document.getElementById('modal-recipient-input').value.trim());
+  const subject = encodeURIComponent(document.getElementById('modal-subject-input').value.trim());
+  const body = encodeURIComponent(document.getElementById('modal-body-input').value.trim());
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${recipient}&su=${subject}&body=${body}`;
+  window.open(gmailUrl, '_blank');
+}
+
+async function sendManualEmailSubmit() {
+  if (!currentModalLeadId) return;
+  const recipient = document.getElementById('modal-recipient-input').value.trim();
+  const subject = document.getElementById('modal-subject-input').value.trim();
+  const body = document.getElementById('modal-body-input').value.trim();
+  const alertBox = document.getElementById('modal-status-alert');
+  const btn = document.getElementById('btn-send-modal-email');
+
+  if (!recipient || !recipient.includes('@')) {
+    alertBox.className = 'text-xs p-3 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 block';
+    alertBox.textContent = 'Please enter a valid recipient email address.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.classList.add('opacity-70', 'cursor-not-allowed');
+  btn.innerHTML = '<i data-lucide="loader" class="w-3.5 h-3.5 animate-spin text-white"></i> <span>Sending via Gmail...</span>';
+  lucide.createIcons();
+
+  alertBox.className = 'text-xs p-3 rounded-xl bg-slate-800 text-slate-300 block';
+  alertBox.textContent = `Connecting to Gmail SMTP & dispatching pitch to ${recipient}...`;
+
+  try {
+    const res = await fetch(`/api/leads/${currentModalLeadId}/send-custom-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipient_email: recipient,
+        subject: subject,
+        body_text: body
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alertBox.className = 'text-xs p-3 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 block';
+      alertBox.textContent = '🎉 ' + data.message;
+      btn.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i> <span>Email Sent!</span>';
+      lucide.createIcons();
+      setTimeout(() => {
+        closeManualEmailModal();
+        loadStats();
+        loadLeads();
+        loadCampaigns();
+      }, 1500);
+    } else {
+      alertBox.className = 'text-xs p-3 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 block';
+      alertBox.textContent = '❌ ' + data.message;
+      btn.disabled = false;
+      btn.classList.remove('opacity-70', 'cursor-not-allowed');
+      btn.innerHTML = '<i data-lucide="send" class="w-3.5 h-3.5 text-white"></i> <span>Try Again</span>';
+      lucide.createIcons();
+    }
+  } catch (err) {
+    alertBox.className = 'text-xs p-3 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 block';
+    alertBox.textContent = '❌ Network error: ' + err;
+    btn.disabled = false;
+    btn.classList.remove('opacity-70', 'cursor-not-allowed');
+    btn.innerHTML = '<i data-lucide="send" class="w-3.5 h-3.5 text-white"></i> <span>Send via Gmail Now</span>';
+    lucide.createIcons();
+  }
 }
 
 loadStats();

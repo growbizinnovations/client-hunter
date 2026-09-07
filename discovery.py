@@ -34,7 +34,12 @@ EXCLUDED_DOMAINS = {
     "buzzfeed.com", "huffpost.com", "thespruce.com", "bobvila.com", "realsimple.com",
     "architecturaldigest.com", "elledecor.com", "housebeautiful.com", "goodhousekeeping.com",
     "hgtv.com", "diynetwork.com", "pinterest.com", "reddit.com", "quora.com", "medium.com",
-    "substack.com", "wordpress.com", "blogspot.com", "wixsite.com"
+    "substack.com", "wordpress.com", "blogspot.com", "wixsite.com", "timeanddate.com",
+    "zocdoc.com", "webmd.com", "vitals.com", "opencare.com", "rankmydentist.com",
+    "deltadental.com", "usnews.com", "here.com", "1-800-dentist.com", "healthgrades.com",
+    "carecredit.com", "doximity.com", "expertise.com", "birdeye.com", "topratedlocal.com",
+    "thedentistranker.com", "thetop10rank.com", "dentalify.com", "bestinhood.com",
+    "smilesatlas.com", "findopendentist.com", "tebra.com", "uservoice.com", "dental.me"
 }
 
 def clean_domain(url: str) -> Optional[str]:
@@ -71,9 +76,9 @@ def is_valid_business_website(url: str, title: str = "") -> bool:
     if title:
         t_low = title.lower()
         if any(bad_phrase in t_low for bad_phrase in [
-            "ideas for", "top 10", "top 15", "top 20", "best 10", "best 15", "how to", "guide to",
+            "ideas for", "top 10", "top 15", "top 20", "top 50", "best 10", "best 15", "best 20", "how to", "guide to",
             "magazine", "trends for", "what is", "wikipedia", "directory of", "reviews of best",
-            "near me directory"
+            "near me directory", "compare ", "ranked by", "ratings and reviews", "find a dentist"
         ]):
             return False
             
@@ -84,12 +89,15 @@ def extract_business_name_from_title(title: str, query_niche: str) -> str:
     parts = re.split(r'[\-\|\:\–\—]', title)
     if parts:
         candidate = parts[0].strip()
+        for rem in ["Website", "Services", "Home", "Official Site", "Welcome to", "Dentist in", "Plumber in"]:
+            if candidate.lower().startswith(rem.lower()):
+                candidate = candidate[len(rem):].strip()
         if len(candidate) > 2 and len(candidate) < 60:
             return candidate
     return title.strip()[:60]
 
 def search_live_web(query: str, max_results: int = 25) -> List[Dict[str, str]]:
-    """Fetches real search results across multiple pages from DuckDuckGo HTML and DDGS."""
+    """Fetches real search results across multiple engines (DuckDuckGo HTML & Yahoo)."""
     results = []
     seen_urls = set()
     headers = {
@@ -98,7 +106,7 @@ def search_live_web(query: str, max_results: int = 25) -> List[Dict[str, str]]:
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     }
 
-    # 1. Try DuckDuckGo HTML Search
+    # 1. DuckDuckGo HTML Search
     try:
         url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
         resp = requests.get(url, headers=headers, timeout=10)
@@ -106,7 +114,7 @@ def search_live_web(query: str, max_results: int = 25) -> List[Dict[str, str]]:
             soup = BeautifulSoup(resp.text, "html.parser")
             for result in soup.find_all("div", class_="result"):
                 a_elem = result.find("a", class_="result__url")
-                title_elem = result.find("a", class_="result__snippet") or result.find("a", class_="result__title")
+                title_elem = result.find("a", class_="result__title") or result.find("a", class_="result__snippet")
                 if a_elem:
                     href = a_elem.get("href", "").strip()
                     if "uddg=" in href:
@@ -116,20 +124,32 @@ def search_live_web(query: str, max_results: int = 25) -> List[Dict[str, str]]:
                         except Exception:
                             pass
                     if href.startswith("http") and href not in seen_urls:
-                        seen_urls.add(href)
                         title = title_elem.get_text(strip=True) if title_elem else href
-                        results.append({"href": href, "title": title})
+                        if is_valid_business_website(href, title):
+                            seen_urls.add(href)
+                            results.append({"href": href, "title": title})
     except Exception:
         pass
 
-    # 2. Try DDGS API for additional pages of results
+    # 2. Yahoo Search for real local businesses
     try:
-        ddgs = DDGS()
-        for r in ddgs.text(query, region="us-en", max_results=max_results):
-            href = r.get("href", "").strip()
-            if href and href.startswith("http") and href not in seen_urls:
-                seen_urls.add(href)
-                results.append({"href": href, "title": r.get("title", "")})
+        y_url = f"https://search.yahoo.com/search?p={urllib.parse.quote(query)}"
+        resp = requests.get(y_url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for a in soup.find_all("a", href=True):
+                href = a.get("href", "")
+                if "/RU=" in href:
+                    try:
+                        actual = href.split("/RU=")[1].split("/RK=")[0]
+                        actual = urllib.parse.unquote(actual)
+                        title = a.get_text(strip=True) or actual
+                        if actual.startswith("http") and not any(x in actual for x in ["yahoo.com", "yimg.com", "bing.com"]):
+                            if is_valid_business_website(actual, title) and actual not in seen_urls:
+                                seen_urls.add(actual)
+                                results.append({"href": actual, "title": title})
+                    except Exception:
+                        pass
     except Exception:
         pass
 
