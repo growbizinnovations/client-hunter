@@ -177,10 +177,18 @@ def api_save_settings(req: SettingsUpdateRequest):
     settings.DRY_RUN = req.dry_run if req.dry_run is not None else settings.DRY_RUN
     return {"success": True, "message": "Settings saved successfully!"}
 
+@app.get("/api/scan-status")
+def api_get_scan_status():
+    from daemon import SCAN_PROGRESS
+    return SCAN_PROGRESS
+
 @app.post("/api/trigger/scan")
 def api_trigger_scan(background_tasks: BackgroundTasks):
+    from daemon import SCAN_PROGRESS
+    if SCAN_PROGRESS.get("is_scanning", False):
+        return {"success": False, "message": "A city scan is already in progress!"}
     background_tasks.add_task(job_discover_and_audit)
-    return {"success": True, "message": "City scan and audit started in background."}
+    return {"success": True, "message": "City scan and audit started."}
 
 @app.post("/api/trigger/send")
 def api_trigger_send(background_tasks: BackgroundTasks):

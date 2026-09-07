@@ -49,21 +49,41 @@ class GmailAccountManager:
             statuses.append(warmup)
         return statuses
 
-def test_gmail_credentials(email_addr: str, app_pass: str) -> Tuple[bool, str]:
-    """Tests live connection to both Gmail SMTP and IMAP."""
+import socket
+
+def _get_smtp_connection(sender_email: str, sender_password: str, timeout: int = 15):
+    """Creates a robust Gmail SMTP connection supporting SSL Port 465 and TLS Port 587 with IPv4 priority."""
+    # Try Port 465 (SSL) first - works reliably on Render / Cloud containers
     try:
         context = ssl.create_default_context()
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
+        server = smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context, timeout=timeout)
+        server.login(sender_email, sender_password)
+        return server
+    except Exception as e1:
+        # Fallback to Port 587 (STARTTLS)
+        try:
+            context = ssl.create_default_context()
+            server = smtplib.SMTP("smtp.gmail.com", 587, timeout=timeout)
             server.ehlo()
             server.starttls(context=context)
             server.ehlo()
-            server.login(email_addr, app_pass)
-        return True, "Gmail SMTP & Authentication Connected Successfully!"
+            server.login(sender_email, sender_password)
+            return server
+        except Exception as e2:
+            raise Exception(f"Connection failed (SSL 465: {e1} | TLS 587: {e2})")
+
+def test_gmail_credentials(email_addr: str, app_pass: str) -> Tuple[bool, str]:
+    """Tests live connection to Gmail SMTP."""
+    clean_pass = app_pass.replace(" ", "")
+    try:
+        server = _get_smtp_connection(email_addr, clean_pass, timeout=12)
+        server.quit()
+        return True, "Gmail SMTP Connected & Authenticated Successfully!"
     except Exception as e:
         return False, f"Authentication Failed: {str(e)}"
 
 def send_single_email(sender_email: str, sender_password: str, recipient_email: str, subject: str, body_text: str, body_html: str = None) -> Tuple[bool, Optional[str]]:
-    """Sends a single email using SMTP with TLS."""
+    """Sends a single email using robust SMTP."""
     if settings.DRY_RUN:
         print(f"[DRY_RUN] Simulating email send from {sender_email} to {recipient_email}")
         print(f"  Subject: {subject}")
@@ -82,14 +102,10 @@ def send_single_email(sender_email: str, sender_password: str, recipient_email: 
             part2 = MIMEText(body_html, "html", "utf-8")
             msg.attach(part2)
             
-        context = ssl.create_default_context()
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.ehlo()
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, recipient_email, msg.as_string())
-            
+        clean_pass = sender_password.replace(" ", "")
+        server = _get_smtp_connection(sender_email, clean_pass, timeout=20)
+        server.sendmail(sender_email, recipient_email, msg.as_string())
+        server.quit()
         return True, None
     except Exception as e:
         err_msg = str(e)

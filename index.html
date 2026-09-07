@@ -122,20 +122,71 @@
       </div>
     </div>
 
-    <div class="bg-darkcard border border-darkborder rounded-xl p-4 mb-8 flex flex-wrap items-center justify-between gap-4">
+    <div class="bg-darkcard border border-darkborder rounded-xl p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
       <div class="flex items-center space-x-2">
         <span class="text-sm font-semibold text-slate-300">Quick Manual Actions:</span>
       </div>
       <div class="flex flex-wrap items-center gap-3">
-        <button onclick="triggerScan()" class="px-4 py-2 text-sm font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-darkborder flex items-center gap-2 transition">
-          <i data-lucide="search" class="w-4 h-4 text-indigo-400"></i> Scan Next City
+        <button id="btn-scan-city" onclick="triggerScan()" class="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-2 shadow-md transition">
+          <i data-lucide="search" class="w-4 h-4"></i> <span id="btn-scan-text">Scan Next City</span>
         </button>
-        <button onclick="triggerSend()" class="px-4 py-2 text-sm font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-darkborder flex items-center gap-2 transition">
+        <button id="btn-send-batch" onclick="triggerSend()" class="px-4 py-2 text-sm font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-darkborder flex items-center gap-2 transition">
           <i data-lucide="send" class="w-4 h-4 text-yellow-400"></i> Send Queued Batch
         </button>
-        <button onclick="triggerInbox()" class="px-4 py-2 text-sm font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-darkborder flex items-center gap-2 transition">
+        <button id="btn-check-inbox" onclick="triggerInbox()" class="px-4 py-2 text-sm font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-darkborder flex items-center gap-2 transition">
           <i data-lucide="inbox" class="w-4 h-4 text-purple-400"></i> Check Inbox Replies
         </button>
+      </div>
+    </div>
+
+    <!-- Real-time Scan Progress Bar & Live Activity Indicator -->
+    <div id="scan-progress-card" class="hidden bg-gradient-to-r from-slate-900 via-indigo-950/50 to-slate-900 border border-indigo-500/40 rounded-xl p-5 mb-8 shadow-xl relative overflow-hidden transition-all duration-300">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div class="flex items-center space-x-3">
+          <div class="relative flex items-center justify-center">
+            <div class="w-4 h-4 rounded-full bg-brand-500 animate-ping absolute"></div>
+            <div class="w-3 h-3 rounded-full bg-brand-400 relative"></div>
+          </div>
+          <div>
+            <h3 id="scan-target-city" class="text-sm font-bold text-white flex items-center gap-2">
+              <span>Active City Scanner</span>
+            </h3>
+            <p id="scan-stage-text" class="text-xs text-indigo-300 font-medium mt-0.5">Initializing search & audit...</p>
+          </div>
+        </div>
+        <div class="text-right">
+          <span id="scan-pct-badge" class="text-lg font-black text-brand-400 font-mono">0%</span>
+        </div>
+      </div>
+
+      <!-- Progress Track -->
+      <div class="w-full bg-slate-800/80 rounded-full h-3 p-0.5 mb-3 border border-darkborder">
+        <div id="scan-progress-bar" class="bg-gradient-to-r from-brand-600 via-indigo-500 to-emerald-400 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+      </div>
+
+      <!-- Live Counter Metrics -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs mb-3">
+        <div class="bg-slate-900/80 border border-slate-800 rounded-lg p-2 text-center">
+          <div class="text-slate-400 text-[11px]">Businesses Found</div>
+          <div id="prog-leads" class="text-sm font-bold text-white">0</div>
+        </div>
+        <div class="bg-slate-900/80 border border-slate-800 rounded-lg p-2 text-center">
+          <div class="text-slate-400 text-[11px]">Outdated Sites</div>
+          <div id="prog-outdated" class="text-sm font-bold text-rose-400">0</div>
+        </div>
+        <div class="bg-slate-900/80 border border-slate-800 rounded-lg p-2 text-center">
+          <div class="text-slate-400 text-[11px]">Emails Extracted</div>
+          <div id="prog-emails" class="text-sm font-bold text-emerald-400">0</div>
+        </div>
+        <div class="bg-slate-900/80 border border-slate-800 rounded-lg p-2 text-center">
+          <div class="text-slate-400 text-[11px]">Pitches Queued</div>
+          <div id="prog-pitches" class="text-sm font-bold text-brand-400">0</div>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2 text-xs text-slate-400 font-mono bg-slate-950/60 p-2.5 rounded-lg border border-darkborder/50">
+        <i data-lucide="terminal" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+        <span id="scan-log-text" class="truncate">Ready...</span>
       </div>
     </div>
 
@@ -512,22 +563,121 @@ async function loadCities() {
   } catch (err) { console.error('Error loading cities:', err); }
 }
 
+let scanPollInterval = null;
+
+async function pollScanProgress() {
+  try {
+    const res = await fetch('/api/scan-status');
+    const data = await res.json();
+    
+    const card = document.getElementById('scan-progress-card');
+    const bar = document.getElementById('scan-progress-bar');
+    const pctBadge = document.getElementById('scan-pct-badge');
+    const stageText = document.getElementById('scan-stage-text');
+    const logText = document.getElementById('scan-log-text');
+    const targetCity = document.getElementById('scan-target-city');
+    const btnScan = document.getElementById('btn-scan-city');
+    const btnText = document.getElementById('btn-scan-text');
+
+    if (data.is_scanning || data.pct > 0 && data.pct < 100) {
+      card.classList.remove('hidden');
+      bar.style.width = data.pct + '%';
+      pctBadge.textContent = data.pct + '%';
+      if (data.current_city) {
+        targetCity.innerHTML = `<span class="text-brand-300">🎯 Scanning Target:</span> <span class="text-white underline">${data.current_city}</span>`;
+      }
+      stageText.textContent = data.stage || 'Scanning in progress...';
+      logText.textContent = data.log_message || 'Processing...';
+
+      document.getElementById('prog-leads').textContent = data.leads_found || 0;
+      document.getElementById('prog-outdated').textContent = data.outdated_count || 0;
+      document.getElementById('prog-emails').textContent = data.emails_found || 0;
+      document.getElementById('prog-pitches').textContent = data.pitches_queued || 0;
+
+      btnScan.disabled = true;
+      btnScan.classList.add('opacity-70', 'cursor-not-allowed');
+      btnText.textContent = `Scanning (${data.pct}%)...`;
+    } else if (data.pct >= 100) {
+      bar.style.width = '100%';
+      pctBadge.textContent = '100%';
+      stageText.textContent = '✅ Scan Completed!';
+      logText.textContent = data.log_message || 'Completed city scan & outreach pipeline.';
+      
+      document.getElementById('prog-leads').textContent = data.leads_found || 0;
+      document.getElementById('prog-outdated').textContent = data.outdated_count || 0;
+      document.getElementById('prog-emails').textContent = data.emails_found || 0;
+      document.getElementById('prog-pitches').textContent = data.pitches_queued || 0;
+
+      btnScan.disabled = false;
+      btnScan.classList.remove('opacity-70', 'cursor-not-allowed');
+      btnText.textContent = 'Scan Next City';
+
+      if (scanPollInterval) {
+        clearInterval(scanPollInterval);
+        scanPollInterval = null;
+      }
+      loadStats();
+      loadLeads();
+      loadCampaigns();
+      loadCities();
+    }
+  } catch (err) {
+    console.error('Error polling scan progress:', err);
+  }
+}
+
 async function triggerScan() {
-  await fetch('/api/trigger/scan', { method: 'POST' });
-  alert('Started scanning next city in background! Leads will populate shortly.');
-  setTimeout(() => { loadStats(); loadLeads(); }, 3000);
+  const btnScan = document.getElementById('btn-scan-city');
+  const btnText = document.getElementById('btn-scan-text');
+  const card = document.getElementById('scan-progress-card');
+  
+  card.classList.remove('hidden');
+  document.getElementById('scan-progress-bar').style.width = '5%';
+  document.getElementById('scan-pct-badge').textContent = '5%';
+  document.getElementById('scan-stage-text').textContent = 'Starting pipeline...';
+  document.getElementById('scan-log-text').textContent = 'Initializing background scanner and selecting next US city...';
+
+  btnScan.disabled = true;
+  btnScan.classList.add('opacity-70', 'cursor-not-allowed');
+  btnText.textContent = 'Scanning (5%)...';
+
+  const res = await fetch('/api/trigger/scan', { method: 'POST' });
+  const data = await res.json();
+  
+  if (scanPollInterval) clearInterval(scanPollInterval);
+  scanPollInterval = setInterval(pollScanProgress, 900);
 }
 
 async function triggerSend() {
+  const btn = document.getElementById('btn-send-batch');
+  btn.classList.add('opacity-70');
+  btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin text-yellow-400"></i> Dispatching...';
+  lucide.createIcons();
+
   await fetch('/api/trigger/send', { method: 'POST' });
-  alert('Email dispatcher initiated! Dispatching queued batch.');
-  setTimeout(() => { loadStats(); loadCampaigns(); }, 3000);
+  setTimeout(() => {
+    btn.classList.remove('opacity-70');
+    btn.innerHTML = '<i data-lucide="send" class="w-4 h-4 text-yellow-400"></i> Send Queued Batch';
+    lucide.createIcons();
+    loadStats();
+    loadCampaigns();
+  }, 2500);
 }
 
 async function triggerInbox() {
+  const btn = document.getElementById('btn-check-inbox');
+  btn.classList.add('opacity-70');
+  btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin text-purple-400"></i> Checking Inboxes...';
+  lucide.createIcons();
+
   await fetch('/api/trigger/inbox', { method: 'POST' });
-  alert('Checking Gmail inboxes for new replies...');
-  setTimeout(() => { loadStats(); loadInbox(); }, 3000);
+  setTimeout(() => {
+    btn.classList.remove('opacity-70');
+    btn.innerHTML = '<i data-lucide="inbox" class="w-4 h-4 text-purple-400"></i> Check Inbox Replies';
+    lucide.createIcons();
+    loadStats();
+    loadInbox();
+  }, 2500);
 }
 
 async function toggleDaemon() {
