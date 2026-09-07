@@ -2,6 +2,8 @@ import re
 import time
 import urllib.parse
 from typing import List, Dict, Any, Optional
+import requests
+from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 from urllib.parse import urlparse
 
@@ -68,17 +70,20 @@ def extract_business_name_from_title(title: str, query_niche: str) -> str:
             return candidate
     return title.strip()[:60]
 
-def search_live_web(query: str, max_results: int = 5) -> List[Dict[str, str]]:
-    """Fetches real search results from DuckDuckGo HTML and DDGS."""
+def search_live_web(query: str, max_results: int = 25) -> List[Dict[str, str]]:
+    """Fetches real search results across multiple pages from DuckDuckGo HTML and DDGS."""
     results = []
+    seen_urls = set()
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9"
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     }
-    # 1. Try DuckDuckGo HTML directly
+
+    # 1. Try DuckDuckGo HTML Search
     try:
         url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
-        resp = requests.get(url, headers=headers, timeout=8)
+        resp = requests.get(url, headers=headers, timeout=10)
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, "html.parser")
             for result in soup.find_all("div", class_="result"):
@@ -86,50 +91,58 @@ def search_live_web(query: str, max_results: int = 5) -> List[Dict[str, str]]:
                 title_elem = result.find("a", class_="result__snippet") or result.find("a", class_="result__title")
                 if a_elem:
                     href = a_elem.get("href", "").strip()
-                    # unwrap uddg redirect if present
                     if "uddg=" in href:
                         try:
                             actual_url = urllib.parse.unquote(href.split("uddg=")[1].split("&")[0])
                             href = actual_url
                         except Exception:
                             pass
-                    if href.startswith("http"):
+                    if href.startswith("http") and href not in seen_urls:
+                        seen_urls.add(href)
                         title = title_elem.get_text(strip=True) if title_elem else href
                         results.append({"href": href, "title": title})
     except Exception:
         pass
 
-    # 2. Try DDGS API
-    if len(results) < max_results:
-        try:
-            ddgs = DDGS()
-            for r in ddgs.text(query, region="us-en", max_results=max_results + 3):
-                if r.get("href"):
-                    results.append({"href": r["href"], "title": r.get("title", "")})
-        except Exception:
-            pass
+    # 2. Try DDGS API for additional pages of results
+    try:
+        ddgs = DDGS()
+        for r in ddgs.text(query, region="us-en", max_results=max_results):
+            href = r.get("href", "").strip()
+            if href and href.startswith("http") and href not in seen_urls:
+                seen_urls.add(href)
+                results.append({"href": href, "title": r.get("title", "")})
+    except Exception:
+        pass
 
     return results
 
-def discover_businesses_for_city(city: str, state: str, max_leads_per_niche: int = 4, progress_callback=None) -> List[Dict[str, Any]]:
-    """Discovers real local small businesses for a target US city/state using live search engines."""
+def discover_businesses_for_city(city: str, state: str, max_leads_per_niche: int = 15, progress_callback=None) -> List[Dict[str, Any]]:
+    """Discovers real local small businesses for a target US city/state using deep multi-query search."""
     discovered_leads = []
+    total_niches = len(settings.BUSINESS_NICHES)
     
-    print(f"[Discovery] Searching live Google/Web for local businesses in {city}, {state}...", flush=True)
+    print(f"[Discovery] Searching live Google/Web for local businesses in {city}, {state} across all {total_niches} business categories...", flush=True)
     if progress_callback:
-        progress_callback(city, state, "General Search", 0, len(settings.BUSINESS_NICHES), f"Searching Google Maps & Web for local businesses in {city}, {state}...")
+        progress_callback(city, state, "General Search", 0, total_niches, 0, f"Starting deep Google & Maps search for businesses in {city}, {state} across all {total_niches} categories...")
     
     for niche_idx, niche in enumerate(settings.BUSINESS_NICHES):
+        cat_num = niche_idx + 1
         if progress_callback:
-            progress_callback(city, state, niche, niche_idx + 1, len(settings.BUSINESS_NICHES), f"Searching Google for: '{niche}' in {city}, {state} ({niche_idx+1}/{len(settings.BUSINESS_NICHES)})...")
+            progress_callback(
+                city, state, niche, cat_num, total_niches, len(discovered_leads),
+                f"Searching Google for Category {cat_num}/{total_niches}: '{niche}' in {city}, {state} ({len(discovered_leads)} businesses found so far)..."
+            )
             
         queries = [
             f'"{niche}" "{city}, {state}" local business website',
-            f'best "{niche}" "{city}" "{state}"'
+            f'best "{niche}" "{city}" "{state}"',
+            f'"{niche}" in "{city} {state}" reviews phone website',
+            f'local "{niche}" companies "{city}, {state}"'
         ]
         
         for query in queries:
-            results = search_live_web(query, max_results=max_leads_per_niche + 2)
+            results = search_live_web(query, max_results=max_leads_per_niche)
             time.sleep(0.3)
             
             for r in results:
@@ -167,6 +180,11 @@ def discover_businesses_for_city(city: str, state: str, max_leads_per_niche: int
                         "state": state,
                         "niche": niche
                     })
+                    if progress_callback:
+                        progress_callback(
+                            city, state, niche, cat_num, total_niches, len(discovered_leads),
+                            f"Discovered #{len(discovered_leads)}: {biz_name} ({domain}) in {city}, {state} [Category {cat_num}/{total_niches}: {niche}]"
+                        )
                 
     print(f"[Discovery] Total live leads found for {city}, {state}: {len(discovered_leads)}", flush=True)
     return discovered_leads

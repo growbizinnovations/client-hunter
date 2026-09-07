@@ -68,6 +68,7 @@ def api_get_stats():
         "dry_run": settings.DRY_RUN
     }
 
+from sqlalchemy import func
 from db_manager import (
     init_db, get_stats, get_account_warmup_status, SessionLocal,
     delete_lead, cleanup_modern_leads, clear_all_leads_data, set_active_target_city
@@ -94,9 +95,9 @@ def api_get_leads(limit: int = 200, status_filter: str = "ALL", sort_by: str = "
             query = query.filter(func.lower(Lead.niche).contains(niche.strip().lower()))
             
         if sort_by == "worst_first":
-            query = query.order_by(WebsiteAudit.outdated_score.desc().nullslast(), Lead.id.desc())
+            query = query.order_by(WebsiteAudit.outdated_score.desc(), Lead.id.desc())
         elif sort_by == "best_first":
-            query = query.order_by(WebsiteAudit.outdated_score.asc().nullslast(), Lead.id.desc())
+            query = query.order_by(WebsiteAudit.outdated_score.asc(), Lead.id.desc())
         elif sort_by == "name_asc":
             query = query.order_by(Lead.business_name.asc())
         else: # recent
@@ -128,6 +129,9 @@ def api_get_leads(limit: int = 200, status_filter: str = "ALL", sort_by: str = "
                 "created_at": l.created_at.strftime("%Y-%m-%d %H:%M") if l.created_at else None
             })
         return data
+    except Exception as e:
+        print(f"[API Error] /api/leads error: {e}", flush=True)
+        return []
     finally:
         session.close()
 

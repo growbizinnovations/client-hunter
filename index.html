@@ -243,6 +243,7 @@
             <button onclick="setFilter('OUTDATED')" id="filter-btn-OUTDATED" class="px-2.5 py-1 text-xs font-medium rounded-md bg-slate-800 hover:bg-slate-700 text-rose-300 border border-darkborder transition">⚠️ Outdated Only</button>
             <button onclick="setFilter('MODERN')" id="filter-btn-MODERN" class="px-2.5 py-1 text-xs font-medium rounded-md bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-darkborder transition">✅ Good / Modern</button>
             <button onclick="setFilter('EMAIL_FOUND')" id="filter-btn-EMAIL_FOUND" class="px-2.5 py-1 text-xs font-medium rounded-md bg-slate-800 hover:bg-slate-700 text-blue-300 border border-darkborder transition">📧 With Email</button>
+            <span id="leads-count-label" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 ml-2">Showing 0 businesses</span>
           </div>
 
           <div class="flex items-center space-x-2">
@@ -545,8 +546,10 @@ async function loadLeads() {
     const sortBy = document.getElementById('sort-leads-select') ? document.getElementById('sort-leads-select').value : 'worst_first';
     const res = await fetch(`/api/leads?status_filter=${currentLeadFilter}&sort_by=${sortBy}`);
     const leads = await res.json();
-    document.getElementById('leads-count-label').textContent = `Showing ${leads.length} businesses`;
+    const countLabel = document.getElementById('leads-count-label');
+    if (countLabel) countLabel.textContent = `Showing ${leads.length} businesses`;
     const tbody = document.getElementById('leads-table-body');
+    if (!tbody) return;
     if (leads.length === 0) {
       tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500">No matching leads found for current filter. Click "Scan Next City" to discover new leads!</td></tr>';
       return;

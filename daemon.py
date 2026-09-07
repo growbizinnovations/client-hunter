@@ -89,12 +89,18 @@ def job_discover_and_audit():
         update_scan_progress(pct=10, stage=f"Step 1/4: Discovering businesses in {city_name}", log=f"Searching local high-ticket niches in {city_name} (East-to-West Route)...", city=city_name)
         logging.info(f"[DAEMON] Active target city: {city_obj.city}, {city_obj.state} (Lon: {city_obj.lon})")
         
-        # 1. Discover Businesses with granular niche callbacks
-        def on_search_progress(c_city, c_state, c_niche, n_idx, total_n, msg):
-            calc_pct = 10 + int((n_idx / max(1, total_n)) * 25)
-            update_scan_progress(pct=calc_pct, niche=c_niche, log=msg, stage=f"Step 1/4: Searching '{c_niche}' in {c_city}, {c_state}")
+        # 1. Discover Businesses with granular niche and total businesses count
+        def on_search_progress(c_city, c_state, c_niche, cat_num, total_n, found_cnt, msg):
+            calc_pct = 10 + int((cat_num / max(1, total_n)) * 25)
+            update_scan_progress(
+                pct=calc_pct,
+                niche=f"Category {cat_num}/{total_n}: {c_niche}",
+                leads=found_cnt,
+                log=msg,
+                stage=f"Step 1/4: Category {cat_num} of {total_n} ({c_niche}) in {c_city}, {c_state}"
+            )
             
-        discovered = discover_businesses_for_city(city_obj.city, city_obj.state, max_leads_per_niche=8, progress_callback=on_search_progress)
+        discovered = discover_businesses_for_city(city_obj.city, city_obj.state, max_leads_per_niche=20, progress_callback=on_search_progress)
         
         # 2. Audit Websites for newly discovered or pending leads
         session = SessionLocal()
