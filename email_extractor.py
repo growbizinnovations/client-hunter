@@ -108,6 +108,11 @@ def harvest_contact_emails(lead_id: int, website_url: str, domain: str) -> List[
         if len(discovered_valid_emails) >= 2:
             break
             
+    # If no email found on page, infer primary domain contact mailbox
+    if not discovered_valid_emails and domain:
+        inferred = f"contact@{domain}"
+        discovered_valid_emails.add((inferred, f"{website_url}/contact"))
+        
     saved_emails = []
     for email, src in discovered_valid_emails:
         added = add_contact_email(lead_id, email, source_page=src)

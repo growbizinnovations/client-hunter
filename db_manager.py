@@ -17,6 +17,60 @@ os.makedirs(os.path.dirname(settings.DATABASE_PATH) if os.path.dirname(settings.
 ENGINE = create_engine(f"sqlite:///{settings.DATABASE_PATH}", echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=ENGINE)
 
+DEFAULT_US_CITIES = [
+    {"city": "Portland", "state": "ME", "lat": 43.6591, "lon": -70.2568, "tz": "America/New_York"},
+    {"city": "Boston", "state": "MA", "lat": 42.3601, "lon": -71.0589, "tz": "America/New_York"},
+    {"city": "Worcester", "state": "MA", "lat": 42.2626, "lon": -71.8023, "tz": "America/New_York"},
+    {"city": "Providence", "state": "RI", "lat": 41.8240, "lon": -71.4128, "tz": "America/New_York"},
+    {"city": "Hartford", "state": "CT", "lat": 41.7658, "lon": -72.6734, "tz": "America/New_York"},
+    {"city": "New Haven", "state": "CT", "lat": 41.3083, "lon": -72.9279, "tz": "America/New_York"},
+    {"city": "New York", "state": "NY", "lat": 40.7128, "lon": -74.0060, "tz": "America/New_York"},
+    {"city": "Jersey City", "state": "NJ", "lat": 40.7178, "lon": -74.0431, "tz": "America/New_York"},
+    {"city": "Newark", "state": "NJ", "lat": 40.7357, "lon": -74.1724, "tz": "America/New_York"},
+    {"city": "Philadelphia", "state": "PA", "lat": 39.9526, "lon": -75.1652, "tz": "America/New_York"},
+    {"city": "Allentown", "state": "PA", "lat": 40.6084, "lon": -75.4902, "tz": "America/New_York"},
+    {"city": "Wilmington", "state": "DE", "lat": 39.7391, "lon": -75.5398, "tz": "America/New_York"},
+    {"city": "Baltimore", "state": "MD", "lat": 39.2904, "lon": -76.6122, "tz": "America/New_York"},
+    {"city": "Washington", "state": "DC", "lat": 38.9072, "lon": -77.0369, "tz": "America/New_York"},
+    {"city": "Richmond", "state": "VA", "lat": 37.5407, "lon": -77.4360, "tz": "America/New_York"},
+    {"city": "Virginia Beach", "state": "VA", "lat": 36.8529, "lon": -75.9780, "tz": "America/New_York"},
+    {"city": "Raleigh", "state": "NC", "lat": 35.7796, "lon": -78.6382, "tz": "America/New_York"},
+    {"city": "Charlotte", "state": "NC", "lat": 35.2271, "lon": -80.8431, "tz": "America/New_York"},
+    {"city": "Charleston", "state": "SC", "lat": 32.7765, "lon": -79.9311, "tz": "America/New_York"},
+    {"city": "Atlanta", "state": "GA", "lat": 33.7490, "lon": -84.3880, "tz": "America/New_York"},
+    {"city": "Jacksonville", "state": "FL", "lat": 30.3322, "lon": -81.6557, "tz": "America/New_York"},
+    {"city": "Orlando", "state": "FL", "lat": 28.5383, "lon": -81.3792, "tz": "America/New_York"},
+    {"city": "Miami", "state": "FL", "lat": 25.7617, "lon": -80.1918, "tz": "America/New_York"},
+    {"city": "Tampa", "state": "FL", "lat": 27.9506, "lon": -82.4572, "tz": "America/New_York"},
+    {"city": "Pittsburgh", "state": "PA", "lat": 40.4406, "lon": -79.9959, "tz": "America/New_York"},
+    {"city": "Cleveland", "state": "OH", "lat": 41.4993, "lon": -81.6944, "tz": "America/New_York"},
+    {"city": "Columbus", "state": "OH", "lat": 39.9612, "lon": -82.9988, "tz": "America/New_York"},
+    {"city": "Cincinnati", "state": "OH", "lat": 39.1031, "lon": -84.5120, "tz": "America/New_York"},
+    {"city": "Detroit", "state": "MI", "lat": 42.3314, "lon": -83.0458, "tz": "America/New_York"},
+    {"city": "Indianapolis", "state": "IN", "lat": 39.7684, "lon": -86.1581, "tz": "America/Indiana/Indianapolis"},
+    {"city": "Louisville", "state": "KY", "lat": 38.2527, "lon": -85.7585, "tz": "America/New_York"},
+    {"city": "Nashville", "state": "TN", "lat": 36.1627, "lon": -86.7816, "tz": "America/Chicago"},
+    {"city": "Chicago", "state": "IL", "lat": 41.8781, "lon": -87.6298, "tz": "America/Chicago"},
+    {"city": "Milwaukee", "state": "WI", "lat": 43.0389, "lon": -87.9065, "tz": "America/Chicago"},
+    {"city": "St. Louis", "state": "MO", "lat": 38.6270, "lon": -90.1994, "tz": "America/Chicago"},
+    {"city": "Minneapolis", "state": "MN", "lat": 44.9778, "lon": -93.2650, "tz": "America/Chicago"},
+    {"city": "Kansas City", "state": "MO", "lat": 39.0997, "lon": -94.5786, "tz": "America/Chicago"},
+    {"city": "Dallas", "state": "TX", "lat": 32.7767, "lon": -96.7970, "tz": "America/Chicago"},
+    {"city": "Houston", "state": "TX", "lat": 29.7604, "lon": -95.3698, "tz": "America/Chicago"},
+    {"city": "Austin", "state": "TX", "lat": 30.2672, "lon": -97.7431, "tz": "America/Chicago"},
+    {"city": "San Antonio", "state": "TX", "lat": 29.4241, "lon": -98.4936, "tz": "America/Chicago"},
+    {"city": "Denver", "state": "CO", "lat": 39.7392, "lon": -104.9903, "tz": "America/Denver"},
+    {"city": "Phoenix", "state": "AZ", "lat": 33.4484, "lon": -112.0740, "tz": "America/Phoenix"},
+    {"city": "Las Vegas", "state": "NV", "lat": 36.1699, "lon": -115.1398, "tz": "America/Los_Angeles"},
+    {"city": "Salt Lake City", "state": "UT", "lat": 40.7608, "lon": -111.8910, "tz": "America/Denver"},
+    {"city": "San Diego", "state": "CA", "lat": 32.7157, "lon": -117.1611, "tz": "America/Los_Angeles"},
+    {"city": "Los Angeles", "state": "CA", "lat": 34.0522, "lon": -118.2437, "tz": "America/Los_Angeles"},
+    {"city": "San Jose", "state": "CA", "lat": 37.3382, "lon": -121.8863, "tz": "America/Los_Angeles"},
+    {"city": "San Francisco", "state": "CA", "lat": 37.7749, "lon": -122.4194, "tz": "America/Los_Angeles"},
+    {"city": "Portland", "state": "OR", "lat": 45.5152, "lon": -122.6784, "tz": "America/Los_Angeles"},
+    {"city": "Seattle", "state": "WA", "lat": 47.6062, "lon": -122.3321, "tz": "America/Los_Angeles"}
+]
+
 def init_db():
     """Initializes tables and seeds the East-to-West cities table if empty."""
     Base.metadata.create_all(bind=ENGINE)
@@ -25,24 +79,37 @@ def init_db():
     try:
         city_count = session.query(CityProgress).count()
         if city_count == 0:
-            cities_file = os.path.join("config", "cities_east_to_west.json")
-            if os.path.exists(cities_file):
-                with open(cities_file, "r", encoding="utf-8-sig") as f:
-                    cities_data = json.load(f)
-                    
-                cities_data.sort(key=lambda x: x["lon"], reverse=True)
+            cities_data = []
+            candidate_paths = [
+                os.path.join(os.path.dirname(__file__), "cities_east_to_west.json"),
+                "cities_east_to_west.json",
+                os.path.join("config", "cities_east_to_west.json")
+            ]
+            for p in candidate_paths:
+                if os.path.exists(p):
+                    try:
+                        with open(p, "r", encoding="utf-8-sig") as f:
+                            cities_data = json.load(f)
+                            break
+                    except Exception:
+                        pass
+                        
+            if not cities_data:
+                cities_data = DEFAULT_US_CITIES
                 
-                for idx, c in enumerate(cities_data):
-                    city_obj = CityProgress(
-                        city=c["city"],
-                        state=c["state"],
-                        lat=c["lat"],
-                        lon=c["lon"],
-                        timezone=c.get("tz", "America/New_York"),
-                        cursor_index=idx
-                    )
-                    session.add(city_obj)
-                session.commit()
+            cities_data.sort(key=lambda x: x["lon"], reverse=True)
+            
+            for idx, c in enumerate(cities_data):
+                city_obj = CityProgress(
+                    city=c["city"],
+                    state=c["state"],
+                    lat=c.get("lat", 0.0),
+                    lon=c.get("lon", 0.0),
+                    timezone=c.get("tz", "America/New_York"),
+                    cursor_index=idx
+                )
+                session.add(city_obj)
+            session.commit()
     finally:
         session.close()
 
@@ -103,6 +170,9 @@ def get_account_warmup_status(account_email: str) -> Dict[str, Any]:
 def get_next_city_to_scan() -> Optional[CityProgress]:
     session = SessionLocal()
     try:
+        count = session.query(CityProgress).count()
+        if count == 0:
+            init_db()
         unscanned = session.query(CityProgress).filter(CityProgress.last_scanned_at == None).order_by(CityProgress.lon.desc()).first()
         if unscanned:
             return unscanned
