@@ -1,4 +1,6 @@
-﻿import time
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+import time
 import json
 import logging
 from datetime import datetime
@@ -6,19 +8,19 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 
-from config.settings import settings
-from database.db_manager import (
+from settings import settings
+from db_manager import (
     init_db, get_next_city_to_scan, mark_city_scanned,
     get_leads_ready_for_pitch, queue_email, get_stats, SessionLocal
 )
-from database.models import Lead, WebsiteAudit, ContactInfo
-from modules.discovery import discover_businesses_for_city
-from modules.website_auditor import audit_website
-from modules.email_extractor import harvest_contact_emails
-from modules.ai_pitcher import generate_personalized_pitch
-from modules.sender import process_email_queue, GmailAccountManager
-from modules.inbox_monitor import check_all_inboxes
-from modules.follow_up import check_and_queue_follow_ups
+from models import Lead, WebsiteAudit, ContactInfo
+from discovery import discover_businesses_for_city
+from website_auditor import audit_website
+from email_extractor import harvest_contact_emails
+from ai_pitcher import generate_personalized_pitch
+from sender import process_email_queue, GmailAccountManager
+from inbox_monitor import check_all_inboxes
+from follow_up import check_and_queue_follow_ups
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
