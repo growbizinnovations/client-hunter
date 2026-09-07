@@ -84,17 +84,51 @@ def is_valid_business_website(url: str, title: str = "") -> bool:
             
     return True
 
-def extract_business_name_from_title(title: str, query_niche: str) -> str:
-    """Extracts a clean business name from search result title."""
-    parts = re.split(r'[\-\|\:\–\—]', title)
-    if parts:
-        candidate = parts[0].strip()
-        for rem in ["Website", "Services", "Home", "Official Site", "Welcome to", "Dentist in", "Plumber in"]:
-            if candidate.lower().startswith(rem.lower()):
-                candidate = candidate[len(rem):].strip()
-        if len(candidate) > 2 and len(candidate) < 60:
-            return candidate
-    return title.strip()[:60]
+def extract_business_name_from_title(title: str, query_niche: str, domain: str = "") -> str:
+    """Extracts a clean, human business name from search result title, falling back to clean domain formatting."""
+    GENERIC_WORDS = {
+        "website", "home", "homepage", "welcome", "official site", "untitled", "index",
+        "about", "contact", "services", "online", "clinic", "office", "page", "main page",
+        "business", "company", "none", "null"
+    }
+    
+    clean_title = title.strip() if title else ""
+    if clean_title:
+        parts = re.split(r'[\-\|\:\–\—\•]', clean_title)
+        for p in parts:
+            candidate = p.strip()
+            for prefix in ["Welcome to ", "Home - ", "Official Website of ", "About ", "Services - "]:
+                if candidate.lower().startswith(prefix.lower()):
+                    candidate = candidate[len(prefix):].strip()
+            if candidate and candidate.lower() not in GENERIC_WORDS and len(candidate) >= 3:
+                return candidate[:50]
+                
+    # Fallback: derive nicely from domain (e.g. smile-la.com -> Smile LA)
+    if domain:
+        d = domain.lower()
+        if d.startswith("www."):
+            d = d[4:]
+        d_name = d.split(".")[0]
+        words = re.split(r'[-_]', d_name)
+        formatted = []
+        for w in words:
+            if w.lower() == "la":
+                formatted.append("LA")
+            elif w.lower() == "dr":
+                formatted.append("Dr.")
+            elif w.lower() == "nyc":
+                formatted.append("NYC")
+            elif w.lower() == "fl":
+                formatted.append("FL")
+            elif w.lower() == "ca":
+                formatted.append("CA")
+            else:
+                formatted.append(w.capitalize())
+        clean_d = " ".join(formatted).strip()
+        if clean_d and clean_d.lower() not in GENERIC_WORDS:
+            return clean_d
+            
+    return "Dental Practice" if "dentist" in query_niche.lower() else "Local Business"
 
 def search_live_web(query: str, max_results: int = 25) -> List[Dict[str, str]]:
     """Fetches real search results across multiple engines (DuckDuckGo HTML & Yahoo)."""
@@ -194,7 +228,7 @@ def discover_businesses_for_city(city: str, state: str, max_leads_per_niche: int
                 if not domain:
                     continue
                     
-                biz_name = extract_business_name_from_title(title, niche)
+                biz_name = extract_business_name_from_title(title, niche, domain=domain)
                 parsed = urlparse(url)
                 clean_root_url = f"{parsed.scheme}://{parsed.netloc}"
                 
@@ -312,7 +346,7 @@ def search_custom_niche_in_city(niche: str, location_query: str = "", max_result
             if not domain:
                 continue
                 
-            biz_name = extract_business_name_from_title(title, clean_niche)
+            biz_name = extract_business_name_from_title(title, clean_niche, domain=domain)
             parsed = urlparse(url)
             clean_root_url = f"{parsed.scheme}://{parsed.netloc}"
             

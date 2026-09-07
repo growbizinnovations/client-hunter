@@ -390,6 +390,14 @@
               <label class="block text-xs font-semibold text-slate-300 mb-1">Gemini API Key (Optional)</label>
               <input type="password" id="input-gemini-key" placeholder="AIzaSy..." class="w-full bg-slate-900 border border-darkborder rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500" />
             </div>
+            <div class="p-3 rounded-xl bg-slate-950/80 border border-indigo-500/30">
+              <label class="block text-xs font-bold text-indigo-300 mb-1 flex items-center justify-between">
+                <span>Resend / Brevo API Key (Optional - Cloud Port 443)</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-normal">Bypasses Cloud SMTP blocks</span>
+              </label>
+              <input type="password" id="input-resend-key" placeholder="re_123456... or xkeysib-..." class="w-full bg-slate-900 border border-darkborder rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500 font-mono mb-1" />
+              <p class="text-[11px] text-slate-400">Free 300 emails/day without credit card via resend.com or brevo.com for 100% automated cloud dispatch.</p>
+            </div>
             <div class="pt-2 flex items-center justify-between">
               <label class="flex items-center gap-2 text-xs font-medium text-slate-300 cursor-pointer">
                 <input type="checkbox" id="input-dry-run" class="rounded bg-slate-900 border-darkborder text-brand-600 focus:ring-0" />
@@ -543,14 +551,24 @@
 
         <!-- Modal Footer -->
         <div class="px-6 py-4 bg-slate-950/90 border-t border-darkborder flex flex-wrap items-center justify-between gap-3">
-          <button 
-            id="btn-open-gmail-web" 
-            onclick="openInGmailWeb()" 
-            class="px-3.5 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-darkborder transition flex items-center gap-1.5"
-            title="Open this draft directly in Gmail browser composer"
-          >
-            <i data-lucide="external-link" class="w-3.5 h-3.5 text-indigo-400"></i> Open in Gmail Composer
-          </button>
+          <div class="flex items-center gap-2">
+            <button 
+              id="btn-open-gmail-web" 
+              onclick="openInGmailWeb()" 
+              class="px-4 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition flex items-center gap-1.5 active:scale-95"
+              title="Open this draft directly in Gmail browser composer"
+            >
+              <i data-lucide="external-link" class="w-3.5 h-3.5 text-white"></i> <span>Open in Gmail Composer</span>
+            </button>
+            <button 
+              id="btn-mark-sent-tracker" 
+              onclick="markEmailSentManually()" 
+              class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 transition flex items-center gap-1.5"
+              title="Click after sending in Gmail to log into campaign tracker and stats"
+            >
+              <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Mark Sent in Tracker
+            </button>
+          </div>
           <div class="flex items-center gap-2">
             <button 
               onclick="closeManualEmailModal()" 
@@ -1063,6 +1081,12 @@ async function loadSettings() {
     if (data.sender_name && !document.getElementById('input-sender-name').value) {
       document.getElementById('input-sender-name').value = data.sender_name;
     }
+    if (data.gemini_key && !document.getElementById('input-gemini-key').value) {
+      document.getElementById('input-gemini-key').value = data.gemini_key;
+    }
+    if (data.resend_key && !document.getElementById('input-resend-key').value) {
+      document.getElementById('input-resend-key').value = data.resend_key;
+    }
     if (data.dry_run !== undefined) {
       document.getElementById('input-dry-run').checked = data.dry_run;
     }
@@ -1138,6 +1162,7 @@ async function saveSettings() {
   const pass = document.getElementById('input-gmail-pass').value;
   const sender = document.getElementById('input-sender-name').value;
   const gemini = document.getElementById('input-gemini-key').value;
+  const resend = document.getElementById('input-resend-key').value;
   const dryRun = document.getElementById('input-dry-run').checked;
   const msgBox = document.getElementById('settings-status-msg');
 
@@ -1149,6 +1174,7 @@ async function saveSettings() {
       gmail_pass: pass,
       sender_name: sender,
       gemini_key: gemini,
+      resend_key: resend,
       dry_run: dryRun
     })
   });
@@ -1157,6 +1183,38 @@ async function saveSettings() {
   msgBox.textContent = '✅ ' + data.message;
   loadStats();
   loadSettings();
+}
+
+async function markEmailSentManually() {
+  if (!currentModalLeadId) return;
+  const recipient = document.getElementById('modal-recipient-input').value.trim();
+  const subject = document.getElementById('modal-subject-input').value.trim();
+  const body = document.getElementById('modal-body-input').value.trim();
+  const alertBox = document.getElementById('modal-status-alert');
+
+  try {
+    const res = await fetch(`/api/leads/${currentModalLeadId}/mark-sent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipient_email: recipient,
+        subject: subject,
+        body_text: body
+      })
+    });
+    const data = await res.json();
+    alertBox.className = 'text-xs p-3 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 block';
+    alertBox.textContent = '🎉 ' + data.message;
+    setTimeout(() => {
+      closeManualEmailModal();
+      loadStats();
+      loadLeads();
+      loadCampaigns();
+    }, 1200);
+  } catch (err) {
+    alertBox.className = 'text-xs p-3 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/30 block';
+    alertBox.textContent = 'Failed to mark as sent: ' + err;
+  }
 }
 
 let currentModalLeadId = null;

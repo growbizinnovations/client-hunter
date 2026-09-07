@@ -2,6 +2,7 @@ import smtplib
 import ssl
 import time
 import random
+import requests
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -52,15 +53,13 @@ class GmailAccountManager:
 import socket
 
 def _get_smtp_connection(sender_email: str, sender_password: str, timeout: int = 15):
-    """Creates a robust Gmail SMTP connection supporting SSL Port 465 and TLS Port 587 with IPv4 priority."""
-    # Try Port 465 (SSL) first - works reliably on Render / Cloud containers
+    """Creates a robust Gmail SMTP connection supporting SSL Port 465 and TLS Port 587."""
     try:
         context = ssl.create_default_context()
         server = smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context, timeout=timeout)
         server.login(sender_email, sender_password)
         return server
     except Exception as e1:
-        # Fallback to Port 587 (STARTTLS)
         try:
             context = ssl.create_default_context()
             server = smtplib.SMTP("smtp.gmail.com", 587, timeout=timeout)
@@ -71,6 +70,49 @@ def _get_smtp_connection(sender_email: str, sender_password: str, timeout: int =
             return server
         except Exception as e2:
             raise Exception(f"Connection failed (SSL 465: {e1} | TLS 587: {e2})")
+
+def send_via_resend(api_key: str, from_name: str, from_email: str, recipient_email: str, subject: str, body_text: str, body_html: str = None) -> Tuple[bool, Optional[str]]:
+    """Sends email via Resend HTTPS API (Port 443 - 100% bypasses cloud SMTP port blocks)."""
+    try:
+        headers = {
+            "Authorization": f"Bearer {api_key.strip()}",
+            "Content-Type": "application/json"
+        }
+        sender = f"{from_name} <onboarding@resend.dev>" if "gmail.com" in from_email or not from_email else f"{from_name} <{from_email}>"
+        payload = {
+            "from": sender,
+            "to": [recipient_email],
+            "subject": subject,
+            "text": body_text,
+            "html": body_html if body_html else body_text.replace("\n", "<br>")
+        }
+        res = requests.post("https://api.resend.com/emails", headers=headers, json=payload, timeout=15)
+        if res.status_code in [200, 201]:
+            return True, None
+        return False, f"Resend API Error ({res.status_code}): {res.text}"
+    except Exception as e:
+        return False, f"Resend API Exception: {e}"
+
+def send_via_brevo(api_key: str, from_name: str, from_email: str, recipient_email: str, subject: str, body_text: str, body_html: str = None) -> Tuple[bool, Optional[str]]:
+    """Sends email via Brevo HTTPS API (Port 443 - 100% bypasses cloud SMTP port blocks)."""
+    try:
+        headers = {
+            "api-key": api_key.strip(),
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "sender": {"name": from_name, "email": from_email},
+            "to": [{"email": recipient_email}],
+            "subject": subject,
+            "textContent": body_text,
+            "htmlContent": body_html if body_html else body_text.replace("\n", "<br>")
+        }
+        res = requests.post("https://api.brevo.com/v3/smtp/email", headers=headers, json=payload, timeout=15)
+        if res.status_code in [200, 201]:
+            return True, None
+        return False, f"Brevo API Error ({res.status_code}): {res.text}"
+    except Exception as e:
+        return False, f"Brevo API Exception: {e}"
 
 def test_gmail_credentials(email_addr: str, app_pass: str) -> Tuple[bool, str]:
     """Tests live connection to Gmail SMTP."""
@@ -83,12 +125,22 @@ def test_gmail_credentials(email_addr: str, app_pass: str) -> Tuple[bool, str]:
         return False, f"Authentication Failed: {str(e)}"
 
 def send_single_email(sender_email: str, sender_password: str, recipient_email: str, subject: str, body_text: str, body_html: str = None, campaign_id: int = None) -> Tuple[bool, Optional[str]]:
-    """Sends a single email using robust SMTP."""
+    """Sends a single email using HTTPS API (Resend/Brevo) or robust Gmail SMTP."""
     if settings.DRY_RUN:
         print(f"[DRY_RUN] Simulating email send from {sender_email} to {recipient_email}")
         print(f"  Subject: {subject}")
         return True, None
+
+    # 1. Check for HTTPS API Keys (Bypasses Render / Cloud SMTP Blocks)
+    if settings.RESEND_API_KEY:
+        print(f"[Sender] Dispatching via Resend HTTPS API (Port 443)...")
+        return send_via_resend(settings.RESEND_API_KEY, settings.SENDER_NAME, sender_email, recipient_email, subject, body_text, body_html)
         
+    if settings.BREVO_API_KEY:
+        print(f"[Sender] Dispatching via Brevo HTTPS API (Port 443)...")
+        return send_via_brevo(settings.BREVO_API_KEY, settings.SENDER_NAME, sender_email, recipient_email, subject, body_text, body_html)
+        
+    # 2. Direct Gmail SMTP
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
@@ -108,13 +160,15 @@ def send_single_email(sender_email: str, sender_password: str, recipient_email: 
         msg.attach(part2)
             
         clean_pass = sender_password.replace(" ", "")
-        server = _get_smtp_connection(sender_email, clean_pass, timeout=20)
+        server = _get_smtp_connection(sender_email, clean_pass, timeout=15)
         server.sendmail(sender_email, recipient_email, msg.as_string())
         server.quit()
         return True, None
     except Exception as e:
         err_msg = str(e)
         print(f"[Sender] Error sending email via {sender_email} to {recipient_email}: {err_msg}")
+        if "Network is unreachable" in err_msg or "101" in err_msg or "timed out" in err_msg:
+            err_msg = "Render Cloud Firewall blocks direct SMTP ports. Please click 'Open in Gmail Composer' below to send with 1 click directly from your Gmail, or add a free Resend/Brevo API key in Settings."
         return False, err_msg
 
 def send_campaign_now(campaign_id: int) -> Tuple[bool, str]:

@@ -18,7 +18,7 @@ from db_manager import (
 )
 from models import CityProgress, Lead, WebsiteAudit, ContactInfo, EmailCampaign, InboxMessage, DailySendLog
 from sender import GmailAccountManager, test_gmail_credentials, process_email_queue, send_single_email, send_campaign_now
-from ai_pitcher import generate_personalized_pitch
+from ai_pitcher import generate_personalized_pitch, clean_prospect_name
 from inbox_monitor import check_all_inboxes
 from daemon import job_discover_and_audit, job_send_queued_emails, job_monitor_inbox, job_check_follow_ups
 
@@ -55,6 +55,8 @@ class SettingsUpdateRequest(BaseModel):
     gmail_pass: str
     sender_name: Optional[str] = "Tushar"
     gemini_key: Optional[str] = ""
+    resend_key: Optional[str] = ""
+    brevo_key: Optional[str] = ""
     dry_run: Optional[bool] = False
 
 class TestEmailRequest(BaseModel):
@@ -117,9 +119,10 @@ def api_get_leads(limit: int = 200, status_filter: str = "ALL", sort_by: str = "
                     issues = json.loads(l.audit.issues_json)
                 except Exception:
                     issues = []
+            clean_name = clean_prospect_name(l.business_name, l.domain, l.niche)
             data.append({
                 "id": l.id,
-                "business_name": l.business_name,
+                "business_name": clean_name,
                 "domain": l.domain,
                 "website_url": l.website_url,
                 "city": l.city,
@@ -180,8 +183,10 @@ def api_get_lead_draft_pitch(lead_id: int):
             except Exception:
                 issues = []
         
+        clean_name = clean_prospect_name(lead.business_name, lead.domain, lead.niche)
+        
         pitch = generate_personalized_pitch(
-            business_name=lead.business_name,
+            business_name=clean_name,
             city=lead.city,
             state=lead.state,
             domain=lead.domain,
@@ -194,7 +199,7 @@ def api_get_lead_draft_pitch(lead_id: int):
         return {
             "success": True,
             "lead_id": lead.id,
-            "business_name": lead.business_name,
+            "business_name": clean_name,
             "domain": lead.domain,
             "city": lead.city,
             "state": lead.state,
@@ -203,6 +208,48 @@ def api_get_lead_draft_pitch(lead_id: int):
             "subject": pitch.get("subject", f"Quick question regarding {lead.domain}"),
             "body_text": pitch.get("body_text", "")
         }
+    finally:
+        session.close()
+
+@app.post("/api/leads/{lead_id}/mark-sent")
+def api_mark_custom_email_sent(lead_id: int, req: SendCustomEmailRequest):
+    session = SessionLocal()
+    try:
+        lead = session.query(Lead).filter(Lead.id == lead_id).first()
+        if not lead:
+            return {"success": False, "message": f"Lead #{lead_id} not found."}
+            
+        recipient = req.recipient_email.strip()
+        sender_usr = settings.GMAIL_ACCOUNT_1_USER or "tusharkumarbusinessgrowth@gmail.com"
+        
+        camp = session.query(EmailCampaign).filter(
+            EmailCampaign.lead_id == lead.id,
+            EmailCampaign.recipient_email == recipient
+        ).first()
+        
+        if not camp:
+            camp = EmailCampaign(
+                lead_id=lead.id,
+                recipient_email=recipient,
+                sender_account=sender_usr,
+                subject=req.subject.strip(),
+                body_text=req.body_text.strip(),
+                email_type="INITIAL",
+                status="SENT",
+                sent_at=datetime.utcnow()
+            )
+            session.add(camp)
+        else:
+            camp.subject = req.subject.strip()
+            camp.body_text = req.body_text.strip()
+            camp.sender_account = sender_usr
+            camp.status = "SENT"
+            camp.sent_at = datetime.utcnow()
+            
+        lead.status = "EMAIL_SENT"
+        increment_daily_sent_count(sender_usr)
+        session.commit()
+        return {"success": True, "message": f"Lead #{lead.id} successfully marked as SENT in campaign tracker!"}
     finally:
         session.close()
 
@@ -363,8 +410,11 @@ def api_get_settings():
     return {
         "gmail_user": settings.GMAIL_ACCOUNT_1_USER,
         "sender_name": settings.SENDER_NAME,
+        "gemini_key": settings.GEMINI_API_KEY,
+        "resend_key": settings.RESEND_API_KEY,
+        "brevo_key": settings.BREVO_API_KEY,
         "dry_run": settings.DRY_RUN,
-        "is_configured": bool(settings.GMAIL_ACCOUNT_1_USER and settings.GMAIL_ACCOUNT_1_PASS)
+        "is_configured": bool((settings.GMAIL_ACCOUNT_1_USER and settings.GMAIL_ACCOUNT_1_PASS) or settings.RESEND_API_KEY or settings.BREVO_API_KEY)
     }
 
 @app.post("/api/test-credentials")
@@ -407,6 +457,12 @@ def api_save_settings(req: SettingsUpdateRequest):
         settings.GMAIL_ACCOUNT_1_PASS = req.gmail_pass.strip()
     if req.sender_name and req.sender_name.strip():
         settings.SENDER_NAME = req.sender_name.strip()
+    if req.gemini_key is not None:
+        settings.GEMINI_API_KEY = req.gemini_key.strip()
+    if req.resend_key is not None:
+        settings.RESEND_API_KEY = req.resend_key.strip()
+    if req.brevo_key is not None:
+        settings.BREVO_API_KEY = req.brevo_key.strip()
     if req.dry_run is not None:
         settings.DRY_RUN = req.dry_run
     return {"success": True, "message": "Settings saved and applied successfully!"}

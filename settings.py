@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = Field(default="", env="OPENAI_API_KEY")
     GEMINI_API_KEY: str = Field(default="", env="GEMINI_API_KEY")
     
+    # Cloud Email API Keys (HTTP Port 443 - Bypasses Render/Cloud SMTP Port Blocks)
+    RESEND_API_KEY: str = Field(default="", env="RESEND_API_KEY")
+    BREVO_API_KEY: str = Field(default="", env="BREVO_API_KEY")
+    
     # Operation Mode
     DRY_RUN: bool = Field(default=False, env="DRY_RUN")
     SEND_DURING_BUSINESS_HOURS_ONLY: bool = Field(default=True, env="SEND_DURING_BUSINESS_HOURS_ONLY")
