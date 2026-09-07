@@ -16,7 +16,7 @@ EXCLUDED_TLDS = {
     ".edu", ".gov", ".mil", ".ac.in", ".edu.in", ".gov.in", ".nic.in"
 }
 
-# Known aggregate directories, social platforms, news and education portals
+# Known aggregate directories, social platforms, news, magazines, national retail chains, and non-local portals
 EXCLUDED_DOMAINS = {
     "yelp.com", "yellowpages.com", "angi.com", "thumbtack.com", "homeadvisor.com",
     "facebook.com", "instagram.com", "twitter.com", "linkedin.com", "bbb.org",
@@ -26,7 +26,15 @@ EXCLUDED_DOMAINS = {
     "chamberofcommerce.com", "yellowbook.com", "bizapedia.com", "crunchbase.com",
     "apple.com", "google.com", "bing.com", "yahoo.com", "wikihow.com", "investopedia.com",
     "forbes.com", "dictionary.com", "vocabulary.com", "shiksha.com", "collegedunia.com",
-    "nobroker.in", "careers360.com", "cardekho.com", "sastaticket.pk", "bookme.pk"
+    "nobroker.in", "careers360.com", "cardekho.com", "sastaticket.pk", "bookme.pk",
+    "ulta.com", "bhg.com", "theburn.com", "loudountimes.com", "sephora.com", "walmart.com",
+    "target.com", "homedepot.com", "lowes.com", "amazon.com", "ebay.com", "costco.com",
+    "bestbuy.com", "macys.com", "kohls.com", "nordstrom.com", "walgreens.com", "cvs.com",
+    "nytimes.com", "washingtonpost.com", "cnn.com", "foxnews.com", "usatoday.com",
+    "buzzfeed.com", "huffpost.com", "thespruce.com", "bobvila.com", "realsimple.com",
+    "architecturaldigest.com", "elledecor.com", "housebeautiful.com", "goodhousekeeping.com",
+    "hgtv.com", "diynetwork.com", "pinterest.com", "reddit.com", "quora.com", "medium.com",
+    "substack.com", "wordpress.com", "blogspot.com", "wixsite.com"
 }
 
 def clean_domain(url: str) -> Optional[str]:
@@ -41,7 +49,7 @@ def clean_domain(url: str) -> Optional[str]:
     except Exception:
         return None
 
-def is_valid_business_website(url: str) -> bool:
+def is_valid_business_website(url: str, title: str = "") -> bool:
     domain = clean_domain(url)
     if not domain or len(domain) < 4:
         return False
@@ -50,15 +58,25 @@ def is_valid_business_website(url: str) -> bool:
     if any(domain.endswith(tld) for tld in EXCLUDED_TLDS):
         return False
     
-    # Exclude directory/social/news domains
+    # Exclude directory/social/news/magazine/retail domains
     for excluded in EXCLUDED_DOMAINS:
         if domain == excluded or domain.endswith("." + excluded):
             return False
             
     # Exclude file downloads
-    if any(url.lower().endswith(ext) for ext in [".pdf", ".jpg", ".png", ".zip", ".docx"]):
+    if any(url.lower().endswith(ext) for ext in [".pdf", ".jpg", ".png", ".zip", ".docx", ".mp4", ".svg"]):
         return False
         
+    # Exclude blog articles / listicles / national guides
+    if title:
+        t_low = title.lower()
+        if any(bad_phrase in t_low for bad_phrase in [
+            "ideas for", "top 10", "top 15", "top 20", "best 10", "best 15", "how to", "guide to",
+            "magazine", "trends for", "what is", "wikipedia", "directory of", "reviews of best",
+            "near me directory"
+        ]):
+            return False
+            
     return True
 
 def extract_business_name_from_title(title: str, query_niche: str) -> str:
@@ -149,7 +167,7 @@ def discover_businesses_for_city(city: str, state: str, max_leads_per_niche: int
                 url = r.get("href", "")
                 title = r.get("title", "")
                 
-                if not is_valid_business_website(url):
+                if not is_valid_business_website(url, title):
                     continue
                     
                 domain = clean_domain(url)
@@ -187,4 +205,127 @@ def discover_businesses_for_city(city: str, state: str, max_leads_per_niche: int
                         )
                 
     print(f"[Discovery] Total live leads found for {city}, {state}: {len(discovered_leads)}", flush=True)
+    return discovered_leads
+
+def parse_google_maps_query(query_str: str) -> Tuple[str, str, str]:
+    """Parses a natural search query like 'dentist in Los Angeles, CA' or 'hair transplant Miami' into niche, city, state."""
+    raw = query_str.strip()
+    niche = raw
+    city = "Unknown"
+    state = "US"
+    
+    # Check for common separators: " in ", " near ", " around ", " at "
+    m = re.search(r'^(.*?)\s+(?:in|near|around|at)\s+(.*)$', raw, re.IGNORECASE)
+    if m:
+        niche = m.group(1).strip()
+        location_part = m.group(2).strip()
+        if "," in location_part:
+            parts = location_part.split(",")
+            city = parts[0].strip()
+            state = parts[1].strip().upper()
+        else:
+            city = location_part
+    elif "," in raw:
+        parts = raw.split(",")
+        niche = parts[0].strip()
+        city = parts[1].strip()
+    return niche, city, state
+
+def search_custom_niche_in_city(niche: str, location_query: str = "", max_results: int = 50, progress_callback=None) -> List[Dict[str, Any]]:
+    """Performs an exhaustive multi-query live Google and Google Maps search for any search query or niche + city."""
+    discovered_leads = []
+    
+    # If single search string was passed in niche
+    if not location_query and any(sep in niche.lower() for sep in [" in ", " near ", ","]):
+        parsed_niche, parsed_city, parsed_state = parse_google_maps_query(niche)
+        clean_niche = parsed_niche
+        city = parsed_city
+        state = parsed_state
+        search_target = niche.strip()
+    else:
+        clean_niche = niche.strip()
+        clean_loc = location_query.strip()
+        if "," in clean_loc:
+            parts = clean_loc.split(",")
+            city = parts[0].strip()
+            state = parts[1].strip().upper()
+        elif clean_loc:
+            city = clean_loc
+            state = "US"
+        else:
+            city = "Local"
+            state = "US"
+        search_target = f"{clean_niche} in {clean_loc}" if clean_loc else clean_niche
+        
+    queries = [
+        f'"{search_target}" local business website',
+        f'"{clean_niche}" in "{city}" website',
+        f'best "{clean_niche}" "{city} {state}"',
+        f'"{search_target}" google maps reviews contact phone',
+        f'local "{clean_niche}" companies "{city}"',
+        f'"{clean_niche}" services near "{city} {state}"',
+        f'top rated "{clean_niche}" "{city}"'
+    ]
+    
+    total_queries = len(queries)
+    print(f"[Google Maps Deep Search] Query: '{search_target}' across {total_queries} search angles...", flush=True)
+    
+    if progress_callback:
+        progress_callback(10, f"Scanning Google Maps & Web for '{search_target}'...", len(discovered_leads))
+        
+    for q_idx, q in enumerate(queries):
+        if progress_callback:
+            curr_pct = 10 + int((q_idx / total_queries) * 35)
+            progress_callback(curr_pct, f"Google Maps Page/Query {q_idx+1}/{total_queries}: {q} ({len(discovered_leads)} businesses found)", len(discovered_leads))
+            
+        results = search_live_web(q, max_results=25)
+        time.sleep(0.3)
+        
+        for r in results:
+            url = r.get("href", "")
+            title = r.get("title", "")
+            
+            if not is_valid_business_website(url, title):
+                continue
+                
+            domain = clean_domain(url)
+            if not domain:
+                continue
+                
+            biz_name = extract_business_name_from_title(title, clean_niche)
+            parsed = urlparse(url)
+            clean_root_url = f"{parsed.scheme}://{parsed.netloc}"
+            
+            lead_obj, is_new = get_or_create_lead(
+                business_name=biz_name,
+                website_url=clean_root_url,
+                domain=domain,
+                city=city,
+                state=state,
+                niche=clean_niche
+            )
+            
+            # Add to return list if not already in discovered_leads
+            if not any(d["domain"] == domain for d in discovered_leads):
+                discovered_leads.append({
+                    "id": lead_obj.id,
+                    "business_name": biz_name,
+                    "website_url": clean_root_url,
+                    "domain": domain,
+                    "city": city,
+                    "state": state,
+                    "niche": clean_niche,
+                    "is_new": is_new
+                })
+                if progress_callback:
+                    progress_callback(
+                        10 + int((q_idx / total_queries) * 35),
+                        f"Found #{len(discovered_leads)}: {biz_name} ({domain})",
+                        len(discovered_leads)
+                    )
+                    
+        if len(discovered_leads) >= max_results:
+            break
+            
+    print(f"[Google Maps Deep Search] Finished. Found {len(discovered_leads)} businesses for '{search_target}'.", flush=True)
     return discovered_leads

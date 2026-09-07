@@ -242,23 +242,86 @@ def api_get_cities():
     finally:
         session.close()
 
+from sender import GmailAccountManager, test_gmail_credentials, process_email_queue, send_single_email, send_campaign_now
+
+@app.get("/api/settings")
+def api_get_settings():
+    return {
+        "gmail_user": settings.GMAIL_ACCOUNT_1_USER,
+        "sender_name": settings.SENDER_NAME,
+        "dry_run": settings.DRY_RUN,
+        "is_configured": bool(settings.GMAIL_ACCOUNT_1_USER and settings.GMAIL_ACCOUNT_1_PASS)
+    }
+
 @app.post("/api/test-credentials")
 def api_test_credentials(req: TestEmailRequest):
     success, message = test_gmail_credentials(req.gmail_user.strip(), req.gmail_pass.strip())
     return {"success": success, "message": message}
 
+@app.post("/api/send-test-email")
+def api_send_test_email(req: TestEmailRequest):
+    user = req.gmail_user.strip() if req.gmail_user.strip() else settings.GMAIL_ACCOUNT_1_USER
+    pwd = req.gmail_pass.strip() if req.gmail_pass.strip() else settings.GMAIL_ACCOUNT_1_PASS
+    if not user or not pwd:
+        return {"success": False, "message": "Please provide Gmail address and App Password."}
+        
+    subject = "✅ Client Hunter Agent: Test Email Delivery Confirmation"
+    body_text = f"Hello {settings.SENDER_NAME},\n\nYour Client Hunter email outreach pipeline is active and working properly!\n\nSent from your verified Gmail account: {user}"
+    
+    success, err = send_single_email(
+        sender_email=user,
+        sender_password=pwd,
+        recipient_email=user,
+        subject=subject,
+        body_text=body_text
+    )
+    if success:
+        return {"success": True, "message": f"Real test email successfully delivered to {user}! Check your inbox."}
+    else:
+        return {"success": False, "message": f"Send failed: {err}"}
+
+@app.post("/api/campaigns/{campaign_id}/send-now")
+def api_send_campaign_now(campaign_id: int):
+    success, message = send_campaign_now(campaign_id)
+    return {"success": success, "message": message}
+
 @app.post("/api/save-settings")
 def api_save_settings(req: SettingsUpdateRequest):
-    settings.GMAIL_ACCOUNT_1_USER = req.gmail_user.strip()
-    settings.GMAIL_ACCOUNT_1_PASS = req.gmail_pass.strip()
-    settings.SENDER_NAME = req.sender_name.strip() if req.sender_name else settings.SENDER_NAME
-    settings.DRY_RUN = req.dry_run if req.dry_run is not None else settings.DRY_RUN
-    return {"success": True, "message": "Settings saved successfully!"}
+    if req.gmail_user.strip():
+        settings.GMAIL_ACCOUNT_1_USER = req.gmail_user.strip()
+    if req.gmail_pass.strip():
+        settings.GMAIL_ACCOUNT_1_PASS = req.gmail_pass.strip()
+    if req.sender_name and req.sender_name.strip():
+        settings.SENDER_NAME = req.sender_name.strip()
+    if req.dry_run is not None:
+        settings.DRY_RUN = req.dry_run
+    return {"success": True, "message": "Settings saved and applied successfully!"}
 
 @app.get("/api/scan-status")
 def api_get_scan_status():
     from daemon import SCAN_PROGRESS
     return SCAN_PROGRESS
+
+class OnDemandSearchRequest(BaseModel):
+    query: Optional[str] = ""
+    niche: Optional[str] = ""
+    location: Optional[str] = ""
+
+@app.post("/api/search/on-demand")
+def api_search_on_demand(req: OnDemandSearchRequest, background_tasks: BackgroundTasks):
+    from daemon import SCAN_PROGRESS, run_on_demand_pipeline
+    if SCAN_PROGRESS.get("is_scanning", False):
+        return {"success": False, "message": "A search or scan is already in progress. Please wait for it to complete."}
+    
+    if req.query and req.query.strip():
+        search_query = req.query.strip()
+        background_tasks.add_task(run_on_demand_pipeline, search_query, "")
+        return {"success": True, "message": f"Live Google Maps deep search initiated for '{search_query}'."}
+    else:
+        niche = req.niche.strip() if req.niche and req.niche.strip() else "Dentist"
+        location = req.location.strip() if req.location and req.location.strip() else "Miami, FL"
+        background_tasks.add_task(run_on_demand_pipeline, niche, location)
+        return {"success": True, "message": f"Live Google Maps & Web search initiated for '{niche}' in '{location}'."}
 
 @app.post("/api/trigger/scan")
 def api_trigger_scan(background_tasks: BackgroundTasks):

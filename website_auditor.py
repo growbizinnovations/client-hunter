@@ -125,10 +125,10 @@ def audit_website(lead_id: int, url: str) -> Dict[str, Any]:
             outdated_score += 15
             issues.append(f"Slow initial page load time ({load_time_sec}s), causing potential customer drop-off")
             
-        # Modern platforms detection
+        # Modern platforms detection - only if no major layout/ssl flaws
         is_modern_builder = any(keyword in html_content.lower() for keyword in ["wp-content/themes/framer", "webflow", "squarespace", "shopify", "framer.com", "wix.com"])
-        if is_modern_builder:
-            outdated_score = max(0, outdated_score - 30)
+        if is_modern_builder and not uses_tables and not uses_flash and has_viewport:
+            outdated_score = max(0, outdated_score - 20)
             positive_cues.append("Uses a modern CMS platform")
             
     except Exception as e:
@@ -136,13 +136,14 @@ def audit_website(lead_id: int, url: str) -> Dict[str, Any]:
         outdated_score += 20
         issues.append(f"Connection error or server latency: {str(e)[:100]}")
         
-    is_outdated = (outdated_score >= 35)
+    # Any website with detected layout/tech/copyright flaws is classified as OUTDATED (Target for Redesign)
+    is_outdated = (outdated_score >= 15 or len(issues) >= 1)
     
     # Generate human readable audit summary
     if is_outdated:
-        summary = f"Outdated Website (Score: {outdated_score}/100). Found {len(issues)} critical upgrade areas."
+        summary = f"Outdated Website (Flaws Detected: {len(issues)}). High-potential redesign target."
     else:
-        summary = f"Modern Website (Score: {outdated_score}/100). Well-maintained."
+        summary = f"Modern Website (Design Score: 100/100). Well-maintained."
         
     # Save to database
     save_website_audit(

@@ -14,7 +14,7 @@ from db_manager import (
     get_leads_ready_for_pitch, queue_email, get_stats, SessionLocal
 )
 from models import Lead, WebsiteAudit, ContactInfo
-from discovery import discover_businesses_for_city
+from discovery import discover_businesses_for_city, search_custom_niche_in_city
 from website_auditor import audit_website
 from email_extractor import harvest_contact_emails
 from ai_pitcher import generate_personalized_pitch
@@ -200,6 +200,98 @@ def job_discover_and_audit():
     except Exception as e:
         logging.error(f"[DAEMON] Error during city scan: {e}")
         update_scan_progress(pct=100, stage="Error", log=f"Scan error: {str(e)}")
+    finally:
+        SCAN_PROGRESS["is_scanning"] = False
+
+def run_on_demand_pipeline(niche: str, location: str = ""):
+    """Executes on-demand Google Maps & Web discovery + website health audit + email extraction for any natural search query."""
+    global SCAN_PROGRESS
+    full_target = f"{niche} in {location}".strip() if (location and location.strip()) else niche.strip()
+    SCAN_PROGRESS["is_scanning"] = True
+    SCAN_PROGRESS["pct"] = 5
+    SCAN_PROGRESS["current_city"] = location if location else "Google Maps"
+    SCAN_PROGRESS["current_niche"] = niche
+    SCAN_PROGRESS["leads_found"] = 0
+    SCAN_PROGRESS["audited_count"] = 0
+    SCAN_PROGRESS["outdated_count"] = 0
+    SCAN_PROGRESS["emails_found"] = 0
+    SCAN_PROGRESS["pitches_queued"] = 0
+    SCAN_PROGRESS["stage"] = f"Searching Google Maps for '{full_target}'..."
+    SCAN_PROGRESS["log_message"] = f"Starting deep scan across all result pages..."
+    
+    try:
+        def on_search(pct, msg, cnt):
+            update_scan_progress(pct=pct, log=msg, leads=cnt)
+            
+        discovered = search_custom_niche_in_city(niche, location, max_results=45, progress_callback=on_search)
+        total_discovered = len(discovered)
+        update_scan_progress(pct=45, stage=f"Auditing {total_discovered} websites for '{full_target}'", leads=total_discovered, log=f"Discovered {total_discovered} businesses. Auditing website design quality...")
+        
+        session = SessionLocal()
+        outdated_cnt = 0
+        audited_cnt = 0
+        
+        try:
+            for idx, item in enumerate(discovered):
+                lead = session.query(Lead).filter(Lead.id == item["id"]).first()
+                if not lead:
+                    continue
+                audited_cnt += 1
+                curr_pct = 45 + int((idx / max(1, total_discovered)) * 30)
+                update_scan_progress(pct=curr_pct, audited=audited_cnt, log=f"Auditing [{idx+1}/{total_discovered}]: {lead.business_name} ({lead.domain})...")
+                
+                audit_res = audit_website(lead.id, lead.website_url)
+                if audit_res["is_outdated"]:
+                    outdated_cnt += 1
+                    update_scan_progress(outdated=outdated_cnt, log=f"⚠️ Outdated website confirmed: {lead.business_name} (Score: {audit_res['outdated_score']}/100)")
+                    emails = harvest_contact_emails(lead.id, lead.website_url, lead.domain)
+                    if emails:
+                        update_scan_progress(emails=SCAN_PROGRESS["emails_found"] + len(emails))
+                    else:
+                        lead.status = "NO_EMAIL_FOUND"
+                        session.commit()
+                else:
+                    logging.info(f"  -> Modern website: {lead.business_name}")
+            session.commit()
+        finally:
+            session.close()
+            
+        # Generate pitches for ready leads
+        update_scan_progress(pct=80, stage=f"Generating pitches for outdated websites", log=f"Crafting personalized $500 redesign demo offers...")
+        ready_leads = get_leads_ready_for_pitch(limit=40)
+        pitches_cnt = 0
+        for idx, lead in enumerate(ready_leads):
+            contact = lead.contacts[0] if lead.contacts else None
+            if not contact:
+                continue
+            curr_pct = 80 + int((idx / max(1, len(ready_leads))) * 18)
+            update_scan_progress(pct=curr_pct, log=f"AI Pitch generation for {lead.business_name}...")
+            pitch = generate_personalized_pitch(
+                business_name=lead.business_name,
+                domain=lead.domain,
+                niche=lead.niche,
+                city=lead.city,
+                state=lead.state,
+                issues=[] if not (lead.audit and lead.audit.issues_json) else json.loads(lead.audit.issues_json),
+                offer_price=settings.REDESIGN_OFFER_PRICE,
+                sender_name=settings.SENDER_NAME
+            )
+            queue_email(
+                lead_id=lead.id,
+                recipient_email=contact.email,
+                sender_account=settings.GMAIL_ACCOUNT_1_USER,
+                subject=pitch["subject"],
+                body_text=pitch["body_text"],
+                body_html=pitch.get("body_html"),
+                email_type="INITIAL_OUTREACH"
+            )
+            pitches_cnt += 1
+            update_scan_progress(pitches=pitches_cnt, log=f"✅ Queued pitch for {lead.business_name} <{contact.email}>")
+            
+        update_scan_progress(pct=100, stage="Search & Audit Completed!", log=f"Completed '{niche}' search in {location}! Discovered {total_discovered} businesses, {outdated_cnt} outdated targets.")
+    except Exception as e:
+        logging.error(f"[On-Demand Search] Error: {e}")
+        update_scan_progress(pct=100, stage="Search Error", log=f"Error: {str(e)}")
     finally:
         SCAN_PROGRESS["is_scanning"] = False
 

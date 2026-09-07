@@ -117,14 +117,56 @@ def send_single_email(sender_email: str, sender_password: str, recipient_email: 
         print(f"[Sender] Error sending email via {sender_email} to {recipient_email}: {err_msg}")
         return False, err_msg
 
-def process_email_queue(max_batch_size: int = 10) -> int:
-    """Processes queued emails using available accounts respecting warmup ramp-up limits."""
+def send_campaign_now(campaign_id: int) -> Tuple[bool, str]:
+    """Immediately sends a single campaign email by ID and updates its status in DB."""
+    session = SessionLocal()
+    try:
+        camp = session.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
+        if not camp:
+            return False, f"Campaign #{campaign_id} not found."
+            
+        sender_usr = settings.GMAIL_ACCOUNT_1_USER
+        sender_pwd = settings.GMAIL_ACCOUNT_1_PASS
+        
+        if not sender_usr or not sender_pwd:
+            return False, "Gmail account credentials not configured in Settings."
+            
+        success, err = send_single_email(
+            sender_email=sender_usr,
+            sender_password=sender_pwd,
+            recipient_email=camp.recipient_email,
+            subject=camp.subject,
+            body_text=camp.body_text,
+            body_html=camp.body_html,
+            campaign_id=camp.id
+        )
+        
+        if success:
+            mark_email_sent(camp.id)
+            increment_daily_sent_count(sender_usr)
+            return True, f"Email successfully sent to {camp.recipient_email}!"
+        else:
+            camp.status = "FAILED"
+            camp.error_message = err
+            session.commit()
+            return False, f"Send failed: {err}"
+    finally:
+        session.close()
+
+def process_email_queue(max_batch_size: int = 10, include_failed: bool = True) -> int:
+    """Processes queued (and optionally failed) emails using available accounts."""
     account_mgr = GmailAccountManager()
     session = SessionLocal()
     sent_count = 0
     
     try:
-        queued_campaigns = session.query(EmailCampaign).filter(EmailCampaign.status == "QUEUED").order_by(EmailCampaign.created_at.asc()).limit(max_batch_size).all()
+        statuses = ["QUEUED"]
+        if include_failed:
+            statuses.append("FAILED")
+            
+        queued_campaigns = session.query(EmailCampaign).filter(
+            EmailCampaign.status.in_(statuses)
+        ).order_by(EmailCampaign.created_at.asc()).limit(max_batch_size).all()
         
         for camp in queued_campaigns:
             acc = account_mgr.get_available_account()
@@ -157,7 +199,7 @@ def process_email_queue(max_batch_size: int = 10) -> int:
                 increment_daily_sent_count(sender_usr)
                 sent_count += 1
                 
-                delay = random.randint(3, 5) if settings.DRY_RUN else random.randint(settings.MIN_DELAY_BETWEEN_EMAILS_SEC, settings.MAX_DELAY_BETWEEN_EMAILS_SEC)
+                delay = random.randint(2, 4) if settings.DRY_RUN else random.randint(settings.MIN_DELAY_BETWEEN_EMAILS_SEC, settings.MAX_DELAY_BETWEEN_EMAILS_SEC)
                 print(f"  [+] Sent successfully! Waiting {delay}s before next send...")
                 time.sleep(delay)
             else:
